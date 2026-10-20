@@ -1,0 +1,20 @@
+# Local environment and caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+# Competition report text and report-derived labels (kept on Kaggle as private datasets)
+gemini_3_1_pro_label_generation/
+sol_label_generation/
+opus_label_generation/
+sonnet_v2_label_generation/
+sonnet_label_completion/
+reader_labels/
+KAGGLE_RUN/step1_upload_dataset/
+# Binaries
+wheelhouse_upload/
+*.whl
+*.pt
+*.npy
+*.zip

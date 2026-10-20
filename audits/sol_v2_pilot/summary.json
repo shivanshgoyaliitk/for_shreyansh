@@ -1,0 +1,14 @@
+{
+  "model": "GPT-5.6 Sol",
+  "prediction_sha256": "f4599f267b7a1a4e1d7d590326bd90c626d7272ecf8f85d4e83dd45414e9fd14",
+  "records": 58,
+  "covered_cells": 652,
+  "total_cells": 696,
+  "abstentions": 44,
+  "macro_auc_covered": 0.7830085997971281,
+  "macro_auc_unsure_neutral": 0.8048402066689401,
+  "gemini_original_macro_auc_unsure_neutral": 0.8163660340639499,
+  "sol_macro_auc_shared": 0.7776263602653923,
+  "gemini_original_macro_auc_shared": 0.776754995542035,
+  "usage_attributable": false
+}

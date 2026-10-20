@@ -1,0 +1,49 @@
+{
+  "scope": "local saved files only",
+  "training_labels": [
+    {
+      "model": "sonnet_label_completion",
+      "completed": 4349,
+      "remaining": 0,
+      "unexpected_ids": 0,
+      "invalid_records": 0,
+      "duplicates": 0
+    },
+    {
+      "model": "sol_label_generation",
+      "completed": 1110,
+      "remaining": 3239,
+      "unexpected_ids": 0,
+      "invalid_records": 0,
+      "duplicates": 0
+    },
+    {
+      "model": "gemini_3_1_pro_label_generation",
+      "completed": 1010,
+      "remaining": 3339,
+      "unexpected_ids": 1,
+      "invalid_records": 0,
+      "duplicates": 0
+    }
+  ],
+  "pilots": [
+    {
+      "file": "gemini_3_1_pro_label_generation/output_v2/validate_gemini_3_1_pro_v2.jsonl",
+      "coverage": 0.9037356321839081,
+      "auc_covered": 0.7816297770312669,
+      "auc_neutral": 0.8163660340639501
+    },
+    {
+      "file": "gemini_3_1_pro_label_generation/output_v2/validate_gemini_3_1_pro_v2_corrected.jsonl",
+      "coverage": 0.9094827586206896,
+      "auc_covered": 0.7930702591428328,
+      "auc_neutral": 0.8287618453817532
+    },
+    {
+      "file": "sol_label_generation/output_v2/validate_labels.jsonl",
+      "coverage": 0.9367816091954023,
+      "auc_covered": 0.7830085997971281,
+      "auc_neutral": 0.8048402066689402
+    }
+  ]
+}

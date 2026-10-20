@@ -1,0 +1,390 @@
+{
+ "tag": "opusv11b",
+ "labels": [
+  "ACL",
+  "MCL",
+  "Medial Meniscus",
+  "Lateral Meniscus",
+  "Medial OA",
+  "Lateral OA",
+  "PF OA",
+  "Effusion",
+  "Synovitis",
+  "Baker's",
+  "Contusion",
+  "Fracture"
+ ],
+ "categories": {
+  "ACL": [
+   "normal",
+   "signal_or_degeneration",
+   "low_grade_sprain_or_partial",
+   "partial_tear_unspecified",
+   "tear_unspecified",
+   "complete_tear"
+  ],
+  "MCL": [
+   "normal",
+   "periligamentous_edema_or_grade1",
+   "partial_tear_or_grade2",
+   "chronic_or_healed_change",
+   "high_grade_partial_tear",
+   "complete_tear"
+  ],
+  "Medial Meniscus": [
+   "normal",
+   "degeneration_no_tear",
+   "abnormal_tear_status_unstated",
+   "tear",
+   "macerated_or_destroyed"
+  ],
+  "Lateral Meniscus": [
+   "normal",
+   "degeneration_no_tear",
+   "abnormal_tear_status_unstated",
+   "tear",
+   "macerated_or_destroyed"
+  ],
+  "Medial OA": [
+   "normal",
+   "low_grade_chondral",
+   "chondral_unspecified",
+   "high_grade_size_unstated",
+   "high_grade_large",
+   "no_cartilage_detail"
+  ],
+  "Lateral OA": [
+   "normal",
+   "low_grade_chondral",
+   "chondral_unspecified",
+   "high_grade_size_unstated",
+   "high_grade_large",
+   "no_cartilage_detail"
+  ],
+  "PF OA": [
+   "normal",
+   "low_grade_chondral",
+   "chondral_unspecified",
+   "high_grade_size_unstated",
+   "high_grade_large",
+   "no_cartilage_detail"
+  ],
+  "Effusion": [
+   "none_or_trace",
+   "small",
+   "small_to_moderate",
+   "present_unspecified",
+   "moderate",
+   "large"
+  ],
+  "Synovitis": [
+   "none",
+   "other_synovial_finding",
+   "fat_pad_inflammation",
+   "synovitis",
+   "synovial_thickening"
+  ],
+  "Baker's": [
+   "none",
+   "small",
+   "present_unspecified",
+   "moderate",
+   "large",
+   "ruptured_or_leaking"
+  ],
+  "Contusion": [
+   "none",
+   "degenerative_or_reactive_edema",
+   "nonspecific_marrow_edema",
+   "fracture_associated_edema_only",
+   "traumatic_marrow_edema",
+   "contusion_or_bruise"
+  ],
+  "Fracture": [
+   "none",
+   "trabecular_microfracture_only",
+   "insufficiency_or_stress_fracture",
+   "avulsion_fracture",
+   "impaction_or_osteochondral_fracture",
+   "fracture_age_unstated",
+   "acute_fracture",
+   "old_or_healed_fracture"
+  ]
+ },
+ "prior": {
+  "ACL": [
+   0.02,
+   0.0499,
+   0.0841,
+   0.2944,
+   0.8195,
+   0.9335
+  ],
+  "MCL": [
+   0.01,
+   0.0524,
+   0.2598,
+   0.0198,
+   0.5685,
+   0.6604
+  ],
+  "Medial Meniscus": [
+   0.04,
+   0.099,
+   0.2485,
+   0.844,
+   0.85
+  ],
+  "Lateral Meniscus": [
+   0.04,
+   0.0989,
+   0.2452,
+   0.8154,
+   0.85
+  ],
+  "Medial OA": [
+   0.02,
+   0.0851,
+   0.3291,
+   0.6274,
+   0.9017,
+   0.3428
+  ],
+  "Lateral OA": [
+   0.02,
+   0.0834,
+   0.3271,
+   0.613,
+   0.9,
+   0.345
+  ],
+  "PF OA": [
+   0.02,
+   0.0809,
+   0.3176,
+   0.6212,
+   0.9004,
+   0.3673
+  ],
+  "Effusion": [
+   0.0366,
+   0.18,
+   0.5,
+   0.5597,
+   0.85,
+   0.95
+  ],
+  "Synovitis": [
+   0.08,
+   0.2774,
+   0.3575,
+   0.7386,
+   0.7
+  ],
+  "Baker's": [
+   0.02,
+   0.1491,
+   0.5449,
+   0.85,
+   0.9462,
+   0.6037
+  ],
+  "Contusion": [
+   0.03,
+   0.0794,
+   0.4049,
+   0.2439,
+   0.7487,
+   0.8017
+  ],
+  "Fracture": [
+   0.02,
+   0.2377,
+   0.3335,
+   0.4994,
+   0.5705,
+   0.5823,
+   0.9,
+   0.1455
+  ]
+ },
+ "base": {
+  "ACL": 0.1304,
+  "MCL": 0.0347,
+  "Medial Meniscus": 0.3829,
+  "Lateral Meniscus": 0.1804,
+  "Medial OA": 0.1579,
+  "Lateral OA": 0.1161,
+  "PF OA": 0.2,
+  "Effusion": 0.2625,
+  "Synovitis": 0.3148,
+  "Baker's": 0.1221,
+  "Contusion": 0.1542,
+  "Fracture": 0.0602
+ },
+ "binaries": {
+  "sign_osteophytes": [
+   "Medial OA",
+   "Lateral OA",
+   "PF OA"
+  ],
+  "sign_subchondral_marrow": [
+   "Medial OA",
+   "Lateral OA",
+   "PF OA"
+  ],
+  "sign_bone_on_bone": [
+   "Medial OA",
+   "Lateral OA",
+   "PF OA"
+  ],
+  "acute": [
+   "MCL",
+   "Fracture",
+   "Contusion",
+   "ACL"
+  ]
+ },
+ "cert_weight": {
+  "definite": 1.0,
+  "probable": 0.7,
+  "possible": 0.4
+ },
+ "counts": {
+  "ACL": {
+   "normal": 2686,
+   "signal_or_degeneration": 409,
+   "low_grade_sprain_or_partial": 190,
+   "partial_tear_unspecified": 157,
+   "tear_unspecified": 91,
+   "complete_tear": 306
+  },
+  "MCL": {
+   "normal": 3098,
+   "periligamentous_edema_or_grade1": 382,
+   "partial_tear_or_grade2": 186,
+   "chronic_or_healed_change": 81,
+   "high_grade_partial_tear": 25,
+   "complete_tear": 25
+  },
+  "Medial Meniscus": {
+   "normal": 1549,
+   "degeneration_no_tear": 539,
+   "abnormal_tear_status_unstated": 181,
+   "tear": 1642,
+   "macerated_or_destroyed": 71
+  },
+  "Lateral Meniscus": {
+   "normal": 2625,
+   "degeneration_no_tear": 377,
+   "abnormal_tear_status_unstated": 167,
+   "tear": 617,
+   "macerated_or_destroyed": 35
+  },
+  "Medial OA": {
+   "normal": 1715,
+   "low_grade_chondral": 520,
+   "chondral_unspecified": 379,
+   "high_grade_size_unstated": 366,
+   "high_grade_large": 144,
+   "no_cartilage_detail": 222
+  },
+  "Lateral OA": {
+   "normal": 1914,
+   "low_grade_chondral": 440,
+   "chondral_unspecified": 288,
+   "high_grade_size_unstated": 230,
+   "high_grade_large": 51,
+   "no_cartilage_detail": 284
+  },
+  "PF OA": {
+   "normal": 1421,
+   "low_grade_chondral": 574,
+   "chondral_unspecified": 399,
+   "high_grade_size_unstated": 663,
+   "high_grade_large": 127,
+   "no_cartilage_detail": 221
+  },
+  "Effusion": {
+   "none_or_trace": 1659,
+   "small": 1000,
+   "small_to_moderate": 59,
+   "present_unspecified": 549,
+   "moderate": 372,
+   "large": 182
+  },
+  "Synovitis": {
+   "none": 65,
+   "other_synovial_finding": 860,
+   "fat_pad_inflammation": 51,
+   "synovitis": 449,
+   "synovial_thickening": 80
+  },
+  "Baker's": {
+   "none": 1120,
+   "small": 481,
+   "present_unspecified": 413,
+   "moderate": 45,
+   "large": 60,
+   "ruptured_or_leaking": 79
+  },
+  "Contusion": {
+   "none": 1733,
+   "degenerative_or_reactive_edema": 735,
+   "nonspecific_marrow_edema": 288,
+   "fracture_associated_edema_only": 86,
+   "traumatic_marrow_edema": 44,
+   "contusion_or_bruise": 406
+  },
+  "Fracture": {
+   "none": 1365,
+   "trabecular_microfracture_only": 23,
+   "insufficiency_or_stress_fracture": 67,
+   "avulsion_fracture": 30,
+   "impaction_or_osteochondral_fracture": 82,
+   "fracture_age_unstated": 98,
+   "acute_fracture": 5,
+   "old_or_healed_fracture": 16
+  }
+ },
+ "unknown": {
+  "ACL|not_mentioned": 305,
+  "MCL|not_mentioned": 376,
+  "Lateral Meniscus|not_mentioned": 375,
+  "Lateral OA|not_mentioned": 964,
+  "PF OA|not_mentioned": 660,
+  "Synovitis|not_mentioned": 2704,
+  "Baker's|not_mentioned": 2011,
+  "Fracture|not_mentioned": 2524,
+  "Medial Meniscus|not_mentioned": 198,
+  "Medial OA|not_mentioned": 820,
+  "Effusion|not_mentioned": 379,
+  "Contusion|not_mentioned": 912,
+  "PF OA|partial_normal": 76,
+  "Lateral OA|high_grade_small": 18,
+  "ACL|high_grade_partial_tear": 61,
+  "Contusion|conflicting": 6,
+  "Medial Meniscus|conflicting": 21,
+  "MCL|sprain_unspecified": 25,
+  "PF OA|high_grade_small": 49,
+  "Medial OA|partial_normal": 9,
+  "Lateral OA|partial_normal": 12,
+  "MCL|tear_unspecified": 11,
+  "Medial OA|high_grade_small": 27,
+  "Medial OA|conflicting": 8,
+  "Lateral OA|conflicting": 9,
+  "Lateral Meniscus|conflicting": 11,
+  "PF OA|conflicting": 20,
+  "Lateral Meniscus|postoperative_no_new_tear": 3,
+  "Effusion|conflicting": 10,
+  "ACL|graft_intact": 2,
+  "Medial Meniscus|postoperative_no_new_tear": 9,
+  "ACL|conflicting": 3,
+  "Synovitis|conflicting": 1,
+  "MCL|conflicting": 1,
+  "Baker's|conflicting": 1
+ },
+ "source_read": "C:/Users/li_wo/rsna_lean_final_opusv11b",
+ "n_studies": 4407,
+ "n_gold_blank": 58
+}
