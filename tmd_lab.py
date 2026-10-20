@@ -46,6 +46,9 @@ CFG = {
     'yelp_polarity': dict(max_len=256, n_cls=2, K=100, d=20, g_lr=1e-4, d_lr=9e-5, p_lr=0.0, dg=1, rho=0.1),
 }
 
+# Recent `datasets` / `huggingface_hub` versions require namespaced repo ids
+HF_ID = {'ag_news': 'fancyzhx/ag_news', 'imdb': 'stanfordnlp/imdb', 'yelp_polarity': 'fancyzhx/yelp_polarity'}
+
 DEV = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -384,7 +387,7 @@ class Lab:
     # ----- data
     def _load_data(self):
         from datasets import load_dataset
-        raw = load_dataset(self.dataset)
+        raw = load_dataset(HF_ID[self.dataset])
         if self.dataset == 'yelp_polarity':  # paper: 63k-sample subset
             idx = random.Random(42).sample(range(len(raw['train'])), 63000)
             raw['train'] = raw['train'].select(idx)
