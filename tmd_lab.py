@@ -575,7 +575,7 @@ def _pwws_search_class():
             index_and_word.sort(key=lambda x: x['saliency_score'], reverse=True)
             return index_and_word, search_over
 
-        def _perform_search(self, initial_result):
+        def perform_search(self, initial_result):  # pip textattack names it perform_search; the fork _perform_search
             cur_text = initial_result.attacked_text
             index_and_word, search_over = self._get_index_order(cur_text)
             i, cur_result = 0, initial_result
@@ -595,6 +595,8 @@ def _pwws_search_class():
                 if cur_result.goal_status == GoalFunctionResultStatus.SUCCEEDED:
                     break
             return cur_result
+
+        _perform_search = perform_search
 
         def check_transformation_compatibility(self, transformation):
             return transformation_consists_of_word_swaps_and_deletions(transformation)
