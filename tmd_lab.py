@@ -55,6 +55,13 @@ DEV = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def setup_env():
     """Keep TensorFlow (used only by TextAttack's sentence encoder) off the GPU."""
     os.environ.setdefault('TF_FORCE_GPU_ALLOW_GROWTH', 'true')
+    try:  # resources TextAttack's constraints need; names changed across NLTK versions, so fetch all of them
+        import nltk
+        for r in ['punkt', 'punkt_tab', 'averaged_perceptron_tagger', 'averaged_perceptron_tagger_eng',
+                  'universal_tagset', 'wordnet', 'omw-1.4', 'stopwords']:
+            nltk.download(r, quiet=True)
+    except Exception as e:
+        print('nltk download skipped:', repr(e)[:120])
     try:
         import tensorflow as tf
         tf.config.set_visible_devices([], 'GPU')
@@ -532,6 +539,76 @@ def _wrapper_class():
     return VictimWrapper
 
 
+def _pwws_search_class():
+    """Port of TextDefender's GreedyWordSwapWIRPWWS (TextDefender/textattack/search_methods/greedy_word_swap_wir_pwws.py).
+
+    The authors' PWWS recipe does not use TextAttack's stock weighted-saliency search: it ranks positions by
+    softmax(saliency) * score of the best substitute, then applies each position's best substitute in that order
+    (checking the constraints) until the label flips. The stock pip recipe searches differently, and is a
+    noticeably different (stronger) attack, so we port the authors' version.
+    """
+    from textattack.goal_function_results import GoalFunctionResultStatus
+    from textattack.search_methods import SearchMethod
+    from textattack.shared.validators import transformation_consists_of_word_swaps_and_deletions
+    from torch.nn.functional import softmax
+
+    class PWWSSearch(SearchMethod):
+        def __init__(self, transformation):
+            self.transformation = transformation
+
+        def _get_index_order(self, initial_text):
+            len_text = len(initial_text.words)
+            leave_one = [initial_text.replace_word_at_index(i, '[UNK]') for i in range(len_text)]
+            results, search_over = self.get_goal_results(leave_one)
+            saliency = np.array([r.score for r in results])
+            soft = softmax(torch.Tensor(saliency), dim=0).numpy()
+            index_and_word = []
+            for idx in range(len_text):
+                item = dict(idx=idx, word=None, saliency_score=0.0)
+                cands = self.get_transformations(initial_text, original_text=initial_text, indices_to_modify=[idx])
+                if cands:
+                    swap_results, _ = self.get_goal_results(cands)
+                    best = max(range(len(swap_results)), key=lambda i: swap_results[i].score)
+                    item['word'] = cands[best].words[idx]
+                    item['saliency_score'] = swap_results[best].score * soft[idx]
+                index_and_word.append(item)
+            index_and_word.sort(key=lambda x: x['saliency_score'], reverse=True)
+            return index_and_word, search_over
+
+        def _perform_search(self, initial_result):
+            cur_text = initial_result.attacked_text
+            index_and_word, search_over = self._get_index_order(cur_text)
+            i, cur_result = 0, initial_result
+            while i < len(index_and_word) and not search_over:
+                if index_and_word[i]['word'] is None:
+                    break
+                cand = cur_text.replace_word_at_index(index=index_and_word[i]['idx'],
+                                                      new_word=index_and_word[i]['word'])
+                i += 1
+                cand.attack_attrs['last_transformation'] = self.transformation
+                filtered = self.filter_transformations([cand], cur_text, initial_result.attacked_text)
+                if len(filtered) == 0:
+                    continue
+                cur_text = filtered[0]
+                result, search_over = self.get_goal_results([cur_text])
+                cur_result = result[0]
+                if cur_result.goal_status == GoalFunctionResultStatus.SUCCEEDED:
+                    break
+            return cur_result
+
+        def check_transformation_compatibility(self, transformation):
+            return transformation_consists_of_word_swaps_and_deletions(transformation)
+
+        @property
+        def is_black_box(self):
+            return True
+
+        def extra_repr_keys(self):
+            return []
+
+    return PWWSSearch
+
+
 def build_attack(name, victim, rho, K=50, sim=0.840845057):
     """Paper settings (Li et al. 2021 / TextDefender): K candidates, <= rho of words modified,
     USE angular similarity >= 0.8408 (window 15), query budget K * (number of words)."""
@@ -564,8 +641,8 @@ def build_attack(name, victim, rho, K=50, sim=0.840845057):
     constraints.append(UniversalSentenceEncoder(threshold=sim, metric='angular', compare_against_original=False,
                                                 window_size=15, skip_text_shorter_than_window=True))
     goal = BudgetGoal(wrapper, K, model_batch_size=64)
-    return Attack(goal, constraints + list(recipe.pre_transformation_constraints), transformation,
-                  recipe.search_method)
+    search = _pwws_search_class()(transformation) if name == 'pwws' else recipe.search_method
+    return Attack(goal, constraints + list(recipe.pre_transformation_constraints), transformation, search)
 
 
 def run_attack(lab, victim, name, pairs):
