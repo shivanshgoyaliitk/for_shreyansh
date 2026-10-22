@@ -651,10 +651,13 @@ def run_attack(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
     """Attack `pairs` in chunks. After each chunk the running counts are passed to on_chunk(state) (the caller
     saves them), and `state` lets a later call resume where an interrupted one stopped. Chunking also bounds
     memory: TextAttack's caches are cleared between chunks."""
+    import faulthandler
     import gc
     from textattack import Attacker, AttackArgs
     from textattack.datasets import Dataset
     attack = build_attack(name, victim, lab.cfg['rho'], K=50)
+    global _STACK_FILE  # watchdog: if a chunk takes > 3 min, dump every thread's stack to /content/stack_dump.txt
+    _STACK_FILE = open('/content/stack_dump.txt', 'w')
     st = dict(done=0, failed=0, skipped=0, succ=0, queries=0.0, seconds=0.0)
     if state:
         st.update(state)
@@ -663,7 +666,9 @@ def run_attack(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
         args = AttackArgs(num_examples=len(part), random_seed=lab.seed, shuffle=False, silent=True,
                           disable_stdout=True, parallel=False)
         t0 = time.time()
+        faulthandler.dump_traceback_later(180, repeat=True, file=_STACK_FILE)
         res = Attacker(attack, Dataset(part), args).attack_dataset()
+        faulthandler.cancel_dump_traceback_later()
         kinds = [type(r).__name__ for r in res]
         st['failed'] += kinds.count('FailedAttackResult')
         st['skipped'] += kinds.count('SkippedAttackResult')
