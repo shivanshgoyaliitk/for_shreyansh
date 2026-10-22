@@ -67,7 +67,7 @@ def setup_env():
         tf.config.set_visible_devices([], 'GPU')
     except Exception as e:  # tensorflow missing or already initialised
         print('tensorflow GPU hiding skipped:', repr(e)[:120])
-    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = False  # variable batch sizes (projection) make autotuning re-run constantly
 
 
 # --------------------------------------------------------------------------
