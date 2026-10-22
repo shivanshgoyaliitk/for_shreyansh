@@ -165,6 +165,47 @@ def train_gan(E_tr, E_va, cfg, epochs=100, bs=1024, seed=42, log_every=5):
     return gan.eval()
 
 
+# Table 4 search ranges of the paper (K = latent dim, d = code dim, dg = D iterations per G update)
+GAN_SPACE = dict(
+    g_lr=[1e-5, 3e-5, 5e-5, 7e-5, 9e-5, 1e-4, 3e-4, 5e-4],
+    d_lr=[7e-5, 9e-5, 1e-4, 3e-4, 5e-4, 7e-4, 9e-4, 1e-3],
+    p_lr=[0.0, 1e-4, 1e-3, 1e-2],
+    K=[50, 100, 200], d=[10, 20, 30, 40], dg=[1, 2, 3, 4, 5])
+
+
+def search_gans(lab, tag, E_tr, E_va, trials=8, epochs=100, seed=0):
+    """Random hyperparameter search like the authors' wandb sweeps: train `trials` InfoGANs and keep the one with the
+    lowest *validation* reconstruction loss (never test data). Each trial is cached, so an interrupted search resumes.
+    The winner is saved as infogan_<tag>_best.*, which Lab.get_gan then picks up automatically."""
+    rng = random.Random(seed)
+    Eva = E_va[:5000].to(DEV)
+    best = None
+    for t in range(trials):
+        hp = {k: rng.choice(v) for k, v in GAN_SPACE.items()}  # same sequence every call, so cached trials line up
+        cfg = dict(lab.cfg, **hp)
+        path = lab._path(f'infogan_{tag}_search{t}.pt')
+        gan = InfoGAN(latent_dim=cfg['K'], code_dim=cfg['d']).to(DEV)
+        if os.path.exists(path):
+            gan.load_state_dict(torch.load(path))
+            gan.eval()
+        else:
+            print(f'--- search trial {t}: {hp}', flush=True)
+            gan = train_gan(E_tr, E_va, cfg, epochs=epochs, seed=lab.seed + t)
+            torch.save(gan.state_dict(), path)
+        torch.manual_seed(1234)
+        rec = project(gan, Eva)[1].mean().item()
+        print(f'trial {t}: val reconstruction loss {rec:.4f}  {hp}', flush=True)
+        if best is None or rec < best[0]:
+            best = (rec, t, hp)
+    rec, t, hp = best
+    gan = InfoGAN(latent_dim=hp['K'], code_dim=hp['d']).to(DEV)
+    gan.load_state_dict(torch.load(lab._path(f'infogan_{tag}_search{t}.pt')))
+    torch.save(gan.state_dict(), lab._path(f'infogan_{tag}_best.pt'))
+    json.dump(dict(hp=hp, rec=rec, trial=t), open(lab._path(f'infogan_{tag}_best.json'), 'w'))
+    print(f'best: trial {t}, val reconstruction loss {rec:.4f}, {hp}')
+    return gan.eval(), hp
+
+
 # --------------------------------------------------------------------------
 # Learned projection encoder (replaces the random search over z)
 # --------------------------------------------------------------------------
@@ -490,6 +531,13 @@ class Lab:
         return out
 
     def get_gan(self, tag, E_tr, E_va, epochs=100, bs=1024):
+        meta = self._path(f'infogan_{tag}_best.json')
+        if os.path.exists(meta):  # a hyperparameter search (search_gans) already picked a winner
+            hp = json.load(open(meta))['hp']
+            gan = InfoGAN(latent_dim=hp['K'], code_dim=hp['d']).to(DEV)
+            gan.load_state_dict(torch.load(self._path(f'infogan_{tag}_best.pt')))
+            print(f'[{tag}] loaded searched InfoGAN {hp}')
+            return gan.eval()
         path = self._path(f"infogan_{tag}_L{self.cfg['K']}C{self.cfg['d']}.pt")
         gan = InfoGAN(latent_dim=self.cfg['K'], code_dim=self.cfg['d']).to(DEV)
         if os.path.exists(path):
