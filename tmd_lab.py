@@ -634,7 +634,8 @@ def build_attack(name, victim, rho, K=50, sim=0.840845057):
     wrapper = _wrapper_class()(victim)
     recipe = {'pwws': PWWSRen2019, 'textfooler': TextFoolerJin2019, 'bertattack': BERTAttackLi2020}[name].build(wrapper)
     if name == 'bertattack':
-        transformation = WordSwapMaskedLM(method='bert-attack', max_candidates=K)
+        transformation = recipe.transformation  # reuse the recipe's masked LM instead of loading a second copy
+        transformation.max_candidates = K
         constraints = list(recipe.constraints)
     else:
         transformation = WordSwapEmbedding(max_candidates=K)
