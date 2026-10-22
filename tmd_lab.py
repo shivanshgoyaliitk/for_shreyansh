@@ -39,7 +39,9 @@ PAPER = {
                       'best_baseline': (95.39, 33.3, 31.2, 43.8)},
 }
 
-# Table 6 (BERT column), max_len from Appendix A.1, modify ratio from Sec. 4.1
+# Table 6 (BERT column), max_len from Appendix A.1, modify ratio from Sec. 4.1.
+# NOTE: K = latent_dim (z) and d = code_dim (number of sub-manifolds), as in the authors' sweep configs
+# (src/train/infogan_*_sweep.yaml: latent_dim in {50,100,200}, code_dim in {10..40}).
 CFG = {
     'ag_news': dict(max_len=128, n_cls=4, K=50, d=20, g_lr=1e-4, d_lr=1e-4, p_lr=0.0, dg=1, rho=0.3),
     'imdb': dict(max_len=256, n_cls=2, K=50, d=40, g_lr=1e-4, d_lr=1e-4, p_lr=0.0, dg=1, rho=0.1),
@@ -119,7 +121,7 @@ class InfoGAN(nn.Module):
 def train_gan(E_tr, E_va, cfg, epochs=100, bs=1024, seed=42, log_every=5):
     """InfoGAN with learnable prior, trained as in the repo (D step each batch, G step every dg batches)."""
     torch.manual_seed(seed)
-    gan = InfoGAN(cfg['d'], cfg['K']).to(DEV)
+    gan = InfoGAN(latent_dim=cfg['K'], code_dim=cfg['d']).to(DEV)
     og = torch.optim.Adam(gan.gen.parameters(), lr=cfg['g_lr'], betas=(0.5, 0.999))
     od = torch.optim.Adam(gan.dis.parameters(), lr=cfg['d_lr'], betas=(0.5, 0.999))
     op = torch.optim.Adam([gan.prior], lr=cfg['p_lr'], betas=(0.5, 0.999)) if cfg['p_lr'] > 0 else None
@@ -488,8 +490,8 @@ class Lab:
         return out
 
     def get_gan(self, tag, E_tr, E_va, epochs=100, bs=1024):
-        path = self._path(f'infogan_{tag}.pt')
-        gan = InfoGAN(self.cfg['d'], self.cfg['K']).to(DEV)
+        path = self._path(f"infogan_{tag}_L{self.cfg['K']}C{self.cfg['d']}.pt")
+        gan = InfoGAN(latent_dim=self.cfg['K'], code_dim=self.cfg['d']).to(DEV)
         if os.path.exists(path):
             gan.load_state_dict(torch.load(path))
             print(f'[{tag}] loaded InfoGAN')
@@ -499,7 +501,7 @@ class Lab:
         return gan
 
     def get_encoder(self, name, gan, E_tr, E_va, force=False, **kw):
-        path = self._path(f'encoder_{name}.pt')
+        path = self._path(f'encoder_{name}_L{gan.latent_dim}C{gan.code_dim}.pt')
         if os.path.exists(path) and not force:
             enc = LatentEncoder(gan.latent_dim, gan.code_dim).to(DEV)
             enc.load_state_dict(torch.load(path))
