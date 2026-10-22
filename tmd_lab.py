@@ -647,23 +647,51 @@ def build_attack(name, victim, rho, K=50, sim=0.840845057):
     return Attack(goal, constraints + list(recipe.pre_transformation_constraints), transformation, search)
 
 
-def run_attack(lab, victim, name, pairs):
+def run_attack(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
+    """Attack `pairs` in chunks. After each chunk the running counts are passed to on_chunk(state) (the caller
+    saves them), and `state` lets a later call resume where an interrupted one stopped. Chunking also bounds
+    memory: TextAttack's caches are cleared between chunks."""
+    import gc
     from textattack import Attacker, AttackArgs
     from textattack.datasets import Dataset
     attack = build_attack(name, victim, lab.cfg['rho'], K=50)
-    args = AttackArgs(num_examples=len(pairs), random_seed=lab.seed, shuffle=False, silent=True,
-                      disable_stdout=True, parallel=False)
-    t0 = time.time()
-    res = Attacker(attack, Dataset(pairs), args).attack_dataset()
-    kinds = [type(r).__name__ for r in res]
-    n = len(kinds)
-    failed, skipped, succ = kinds.count('FailedAttackResult'), kinds.count('SkippedAttackResult'), kinds.count('SuccessfulAttackResult')
-    return dict(acc=100 * failed / n, success_rate=100 * succ / max(1, n - skipped), orig_acc=100 * (n - skipped) / n,
-                avg_queries=float(np.mean([r.num_queries for r in res])), minutes=(time.time() - t0) / 60, n=n)
+    st = dict(done=0, failed=0, skipped=0, succ=0, queries=0.0, seconds=0.0)
+    if state:
+        st.update(state)
+    while st['done'] < len(pairs):
+        part = pairs[st['done']:st['done'] + chunk]
+        args = AttackArgs(num_examples=len(part), random_seed=lab.seed, shuffle=False, silent=True,
+                          disable_stdout=True, parallel=False)
+        t0 = time.time()
+        res = Attacker(attack, Dataset(part), args).attack_dataset()
+        kinds = [type(r).__name__ for r in res]
+        st['failed'] += kinds.count('FailedAttackResult')
+        st['skipped'] += kinds.count('SkippedAttackResult')
+        st['succ'] += kinds.count('SuccessfulAttackResult')
+        st['queries'] += float(sum(r.num_queries for r in res))
+        st['seconds'] += time.time() - t0
+        st['done'] += len(part)
+        try:
+            attack.clear_cache()
+        except Exception:
+            pass
+        del res
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        print(f'    {name}: {st["done"]}/{len(pairs)} done, running acc under attack '
+              f'{100 * st["failed"] / st["done"]:.1f}%, {st["seconds"] / 60:.1f} min', flush=True)
+        if on_chunk:
+            on_chunk(dict(st))
+    n = st['done']
+    return dict(acc=100 * st['failed'] / n, success_rate=100 * st['succ'] / max(1, n - st['skipped']),
+                orig_acc=100 * (n - st['skipped']) / n, avg_queries=st['queries'] / n,
+                minutes=st['seconds'] / 60, n=n)
 
 
-def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler', 'bertattack'), n=1000):
-    """Clean accuracy on the full test set + accuracy under each attack. Cached per (dataset, tag)."""
+def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler', 'bertattack'), n=1000, chunk=50):
+    """Clean accuracy on the full test set + accuracy under each attack. Cached per (dataset, tag).
+    Attacks run in chunks and progress is saved after every chunk, so a disconnect loses at most one chunk."""
     path = lab._path(f'results_{tag}.json')
     results = json.load(open(path)) if os.path.exists(path) else {}
     if 'clean' not in results:
@@ -674,8 +702,19 @@ def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler', 'berta
     for name in attacks:
         if name in results and results[name].get('n') == len(pairs):
             continue
+        partial = results.get(f'_partial_{name}')
+        if partial and partial.get('done', 0) > 0:
+            print(f'[{tag}] resuming {name} at example {partial["done"]}', flush=True)
+        else:
+            partial = None
         print(f'[{tag}] attacking with {name} on {len(pairs)} examples ...', flush=True)
-        results[name] = run_attack(lab, victim, name, pairs)
+
+        def save(st, name=name):
+            results[f'_partial_{name}'] = st
+            json.dump(results, open(path, 'w'), indent=1)
+
+        results[name] = run_attack(lab, victim, name, pairs, state=partial, chunk=chunk, on_chunk=save)
+        results.pop(f'_partial_{name}', None)
         print('   ', {k: round(v, 2) for k, v in results[name].items()}, flush=True)
         json.dump(results, open(path, 'w'), indent=1)
     return results
