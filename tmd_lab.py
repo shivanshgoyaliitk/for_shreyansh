@@ -745,7 +745,7 @@ def run_attack(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
                 minutes=st['seconds'] / 60, n=n)
 
 
-def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler', 'bertattack'), n=1000, chunk=50):
+def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=1000, chunk=50):  # add 'bertattack' explicitly: it is by far the slowest
     """Clean accuracy on the full test set + accuracy under each attack. Cached per (dataset, tag).
     Attacks run in chunks and progress is saved after every chunk, so a disconnect loses at most one chunk."""
     path = lab._path(f'results_{tag}.json')
