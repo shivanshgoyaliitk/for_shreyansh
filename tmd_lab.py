@@ -625,8 +625,19 @@ class Lab:
 BACKEND = 'fork'
 
 
-def results_path(lab, tag):
-    return lab._path(f"{'results_fork_' if BACKEND == 'fork' else 'results_'}{tag}.json")
+def results_path(lab, tag, n=1000):
+    """Results of one victim at one N_EVAL: <prefix><tag>_n<n>.json, so runs of different sizes never overwrite each
+    other. Results saved before files were split by n (<prefix><tag>.json) are migrated on first use."""
+    prefix = 'results_fork_' if BACKEND == 'fork' else 'results_'
+    path = lab._path(f'{prefix}{tag}_n{n}.json')
+    legacy = lab._path(f'{prefix}{tag}.json')
+    if not os.path.exists(path) and os.path.exists(legacy):
+        old = json.load(open(legacy))
+        keep = {k: v for k, v in old.items()
+                if k == 'clean' or (isinstance(v, dict) and v.get('n_requested', v.get('n')) == n)}
+        if len(keep) > 1:
+            json.dump(keep, open(path, 'w'), indent=1)
+    return path
 
 
 def _fork_wrapper(victim):
@@ -920,7 +931,7 @@ def _run_attack_pip(lab, victim, name, pairs, state=None, chunk=50, on_chunk=Non
 def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=1000, chunk=50):  # add 'bertattack' explicitly: it is by far the slowest
     """Clean accuracy on the full test set + accuracy under each attack. Cached per (dataset, tag).
     Attacks run in chunks and progress is saved after every chunk, so a disconnect loses at most one chunk."""
-    path = results_path(lab, tag)
+    path = results_path(lab, tag, n)
     results = json.load(open(path)) if os.path.exists(path) else {}
     if 'clean' not in results:
         results['clean'] = dict(acc=100 * victim.clean_accuracy(E_te, Y_te), n=len(E_te))
@@ -948,13 +959,14 @@ def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=100
     return results
 
 
-def compare(lab, tag, baseline_tag=None):
-    """Table of our results vs the paper's TMD and vanilla numbers (and vs our own baseline run, if present)."""
+def compare(lab, tag, baseline_tag=None, n=1000):
+    """Table of our results vs the paper's TMD and vanilla numbers (and vs our own baseline run at the same N_EVAL,
+    if present)."""
     import pandas as pd
-    res = json.load(open(results_path(lab, tag)))
+    res = json.load(open(results_path(lab, tag, n)))
     base = None
     if baseline_tag:
-        p = results_path(lab, baseline_tag)
+        p = results_path(lab, baseline_tag, n)
         base = json.load(open(p)) if os.path.exists(p) else None
     paper = PAPER[lab.dataset]
     rows = []
