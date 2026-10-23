@@ -16,7 +16,9 @@ import json
 import math
 import os
 import random
+import sys
 import time
+import types
 
 import numpy as np
 import torch
@@ -59,8 +61,30 @@ HF_ID = {'ag_news': 'fancyzhx/ag_news', 'imdb': 'stanfordnlp/imdb', 'yelp_polari
 DEV = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def setup_env():
-    """Keep TensorFlow (used only by TextAttack's sentence encoder) off the GPU."""
+def _use_fork():
+    """Make `import textattack` resolve to the authors' fork in TextDefender/ (pip textattack stays installed)."""
+    td = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'TextDefender')
+    loaded = sys.modules.get('textattack')
+    if loaded is not None and 'TextDefender' not in (getattr(loaded, '__file__', None) or ''):
+        raise RuntimeError('pip textattack is already imported in this process: restart the runtime and call '
+                           'tmd_lab.setup_env() before anything else imports textattack')
+    if td not in sys.path:
+        sys.path.insert(0, td)
+    # The fork's ensemble wrapper imports TextDefender's `args` module, which pulls in every trainer and their
+    # dependencies; only the ProgramArgs name is needed at import time, so a stub is enough.
+    if 'args' not in sys.modules:
+        stub = types.ModuleType('args')
+        stub.ProgramArgs = type('ProgramArgs', (), {})
+        sys.modules['args'] = stub
+
+
+def setup_env(backend='fork'):
+    """Select the attack backend ('fork' = the authors' code, 'pip' = our earlier rebuild) and keep TensorFlow (used
+    only by TextAttack's sentence encoder) off the GPU. Call it before anything imports textattack."""
+    global BACKEND
+    BACKEND = backend
+    if backend == 'fork':
+        _use_fork()
     os.environ.setdefault('TF_FORCE_GPU_ALLOW_GROWTH', 'true')
     try:  # resources TextAttack's constraints need; names changed across NLTK versions, so fetch all of them
         import nltk
@@ -591,8 +615,134 @@ class Lab:
 
 
 # --------------------------------------------------------------------------
-# Attacks with the paper's constraints (TextDefender build_english_attacker)
+# Attacks with the paper's protocol
 # --------------------------------------------------------------------------
+# BACKEND 'fork' (default): the authors' own TextAttack fork (TextDefender/textattack), with the attack built exactly
+# like TextDefender/utils/textattack_utils.py::build_english_attacker and results counted like its SimplifidResult.
+# This is the code behind the paper's Table 1.
+# BACKEND 'pip': our earlier rebuild of the same constraints on pip textattack. Kept for the record only: on the same
+# model, InfoGAN and 200 test examples it gave TMD/PWWS 47.0, while the fork gives 66.0 (paper: 70.0).
+BACKEND = 'fork'
+
+
+def results_path(lab, tag):
+    return lab._path(f"{'results_fork_' if BACKEND == 'fork' else 'results_'}{tag}.json")
+
+
+def _fork_wrapper(victim):
+    from textattack.models.wrappers import ModelWrapper
+
+    class VictimWrapper(ModelWrapper):
+        def __init__(self, victim):
+            self.victim = victim
+            self.model = victim.lab.model
+
+        def __call__(self, text_list):
+            out = []
+            with torch.no_grad():
+                for i in range(0, len(text_list), 32):  # TextDefender's wrapper batch size
+                    out.append(self.victim.scores(list(text_list[i:i + 32])).float().cpu())
+            return torch.cat(out)
+
+        def get_grad(self, text_input):
+            raise NotImplementedError
+
+    return VictimWrapper(victim)
+
+
+def _build_attack_fork(name, victim, rho, K=50, sim=0.840845057):
+    """build_english_attacker (TextDefender/utils/textattack_utils.py) for pwws, textfooler and bae (BERT-Attack)."""
+    import textattack
+    from textattack.attack_recipes import BERTAttackLi2020, PWWSRen2019, TextFoolerJin2019
+    from textattack.constraints.overlap import MaxWordsPerturbed
+    from textattack.constraints.pre_transformation import InputColumnModification
+    from textattack.constraints.semantics import WordEmbeddingDistance
+    from textattack.constraints.semantics.sentence_encoders import UniversalSentenceEncoder
+    from textattack.goal_functions import UntargetedClassification
+    from textattack.shared.attack import Attack
+    from textattack.transformations import WordSwapEmbedding, WordSwapMaskedLM
+    assert 'TextDefender' in textattack.__file__, f'expected the authors\' fork, got {textattack.__file__}'
+
+    wrapper = _fork_wrapper(victim)
+    if name == 'pwws':
+        attacker = PWWSRen2019.build(wrapper)
+    elif name == 'textfooler':
+        attacker = TextFoolerJin2019.build(wrapper)
+    else:
+        attacker = BERTAttackLi2020.build(wrapper)
+        attacker.transformation = WordSwapMaskedLM(method='bert-attack', max_candidates=K)
+    if name in ['textfooler', 'pwws']:
+        attacker.transformation = WordSwapEmbedding(max_candidates=K)
+        for constraint in attacker.constraints:
+            if isinstance(constraint, WordEmbeddingDistance):
+                attacker.constraints.remove(constraint)
+    attacker.constraints.append(MaxWordsPerturbed(max_percent=rho))
+    attacker.constraints.append(UniversalSentenceEncoder(threshold=sim, metric='angular', compare_against_original=False,
+                                                         window_size=15, skip_text_shorter_than_window=True))
+    attacker.pre_transformation_constraints.append(InputColumnModification(['premise', 'hypothesis'], {'premise'}))
+    attacker.goal_function = UntargetedClassification(wrapper, query_budget=K)  # fork: budget = K x number of words
+    return Attack(attacker.goal_function, attacker.constraints + attacker.pre_transformation_constraints,
+                  attacker.transformation, attacker.search_method)
+
+
+def _run_attack_fork(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
+    """Attack `pairs` in chunks with the fork. Counted like TextDefender's SimplifidResult: accuracy under attack =
+    failed / (succeeded + failed + skipped). The fork silently drops an example whose attack raises an exception
+    (shared/attack.py, attack_dataset); those are excluded, as in the paper's code, and their number is reported."""
+    import faulthandler
+    import gc
+    from textattack.attack_results import FailedAttackResult, SkippedAttackResult, SuccessfulAttackResult
+    attack = _build_attack_fork(name, victim, lab.cfg['rho'], K=50)
+    global _STACK_FILE  # watchdog: if a chunk takes > 3 min, dump every thread's stack to /content/stack_dump.txt
+    _STACK_FILE = open('/content/stack_dump.txt' if os.path.isdir('/content') else 'stack_dump.txt', 'w')
+    st = dict(n_requested=len(pairs), done=0, succ=0, fail=0, skip=0, dropped=0, queries=0.0, seconds=0.0)
+    if state:
+        st.update(state)
+    while st['done'] < len(pairs):
+        part = pairs[st['done']:st['done'] + chunk]
+        t0, got = time.time(), 0
+        faulthandler.dump_traceback_later(180, repeat=True, file=_STACK_FILE)
+        for r in attack.attack_dataset(part):
+            got += 1
+            if isinstance(r, SuccessfulAttackResult):
+                st['succ'] += 1
+            elif isinstance(r, FailedAttackResult):
+                st['fail'] += 1
+            elif isinstance(r, SkippedAttackResult):
+                st['skip'] += 1
+            st['queries'] += float(r.perturbed_result.num_queries)
+        faulthandler.cancel_dump_traceback_later()
+        st['dropped'] += len(part) - got
+        st['done'] += len(part)
+        st['seconds'] += time.time() - t0
+        try:
+            attack.clear_cache()
+        except Exception:
+            pass
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        counted = st['succ'] + st['fail'] + st['skip']
+        print(f'    {name}: {st["done"]}/{len(pairs)} done, acc under attack {100 * st["fail"] / max(1, counted):.1f}% '
+              f'(dropped: {st["dropped"]}), {st["seconds"] / 60:.1f} min', flush=True)
+        if on_chunk:
+            on_chunk(dict(st))
+    counted = st['succ'] + st['fail'] + st['skip']
+    return dict(acc=100 * st['fail'] / max(1, counted), acc_counting_dropped_as_wrong=100 * st['fail'] / len(pairs),
+                success_rate=100 * st['succ'] / max(1, st['succ'] + st['fail']),
+                orig_acc=100 * (st['succ'] + st['fail']) / max(1, counted), n=counted, n_requested=len(pairs),
+                dropped=st['dropped'], avg_queries=st['queries'] / max(1, counted), minutes=st['seconds'] / 60)
+
+
+def build_attack(name, victim, rho, K=50, sim=0.840845057):
+    return (_build_attack_fork if BACKEND == 'fork' else _build_attack_pip)(name, victim, rho, K, sim)
+
+
+def run_attack(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
+    return (_run_attack_fork if BACKEND == 'fork' else _run_attack_pip)(lab, victim, name, pairs, state, chunk, on_chunk)
+
+
+# ----- pip backend (kept for the record) -----
 def _wrapper_class():
     from textattack.models.wrappers import ModelWrapper
 
@@ -683,7 +833,7 @@ def _pwws_search_class():
     return PWWSSearch
 
 
-def build_attack(name, victim, rho, K=50, sim=0.840845057):
+def _build_attack_pip(name, victim, rho, K=50, sim=0.840845057):
     """Paper settings (Li et al. 2021 / TextDefender): K candidates, <= rho of words modified,
     USE angular similarity >= 0.8408 (window 15), query budget K * (number of words)."""
     from textattack import Attack
@@ -720,7 +870,7 @@ def build_attack(name, victim, rho, K=50, sim=0.840845057):
     return Attack(goal, constraints + list(recipe.pre_transformation_constraints), transformation, search)
 
 
-def run_attack(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
+def _run_attack_pip(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
     """Attack `pairs` in chunks. After each chunk the running counts are passed to on_chunk(state) (the caller
     saves them), and `state` lets a later call resume where an interrupted one stopped. Chunking also bounds
     memory: TextAttack's caches are cleared between chunks."""
@@ -728,7 +878,7 @@ def run_attack(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
     import gc
     from textattack import Attacker, AttackArgs
     from textattack.datasets import Dataset
-    attack = build_attack(name, victim, lab.cfg['rho'], K=50)
+    attack = _build_attack_pip(name, victim, lab.cfg['rho'], K=50)
     global _STACK_FILE  # watchdog: if a chunk takes > 3 min, dump every thread's stack to /content/stack_dump.txt
     _STACK_FILE = open('/content/stack_dump.txt', 'w')
     st = dict(done=0, failed=0, skipped=0, succ=0, queries=0.0, seconds=0.0)
@@ -770,7 +920,7 @@ def run_attack(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
 def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=1000, chunk=50):  # add 'bertattack' explicitly: it is by far the slowest
     """Clean accuracy on the full test set + accuracy under each attack. Cached per (dataset, tag).
     Attacks run in chunks and progress is saved after every chunk, so a disconnect loses at most one chunk."""
-    path = lab._path(f'results_{tag}.json')
+    path = results_path(lab, tag)
     results = json.load(open(path)) if os.path.exists(path) else {}
     if 'clean' not in results:
         results['clean'] = dict(acc=100 * victim.clean_accuracy(E_te, Y_te), n=len(E_te))
@@ -778,7 +928,7 @@ def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=100
     print(f'[{tag}] clean acc {results["clean"]["acc"]:.2f}')
     pairs = lab.attack_pairs(n)
     for name in attacks:
-        if name in results and results[name].get('n') == len(pairs):
+        if name in results and results[name].get('n_requested', results[name].get('n')) == len(pairs):
             continue
         partial = results.get(f'_partial_{name}')
         if partial and partial.get('done', 0) > 0:
@@ -801,10 +951,10 @@ def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=100
 def compare(lab, tag, baseline_tag=None):
     """Table of our results vs the paper's TMD and vanilla numbers (and vs our own baseline run, if present)."""
     import pandas as pd
-    res = json.load(open(lab._path(f'results_{tag}.json')))
+    res = json.load(open(results_path(lab, tag)))
     base = None
     if baseline_tag:
-        p = lab._path(f'results_{baseline_tag}.json')
+        p = results_path(lab, baseline_tag)
         base = json.load(open(p)) if os.path.exists(p) else None
     paper = PAPER[lab.dataset]
     rows = []

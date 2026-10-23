@@ -6,7 +6,7 @@ Goal: each notebook tries one improvement to the paper's Textual Manifold-based 
 
 | Notebook | Improvement | Changes vs the paper | Main risk |
 |---|---|---|---|
-| `00_reproduce_tmd.ipynb` | none: reproduces the paper's TMD and vanilla rows | authors' fine-tuning recipe (10 epochs, batch 64, final epoch), InfoGAN search, attack rebuilt on pip `textattack` | if this does not land near Table 1, the other notebooks mean little |
+| `00_reproduce_tmd.ipynb` | none: reproduces the paper's TMD and vanilla rows | authors' fine-tuning recipe (10 epochs, batch 64, final epoch), InfoGAN search, attacks on the authors' own TextAttack fork | if this does not land near Table 1, the other notebooks mean little |
 | `01_ensemble_projection.ipynb` | average R projections per query | inference only | R times the projection compute per query |
 | `02_projection_aware_head.ipynb` | fine-tune the classifier head on projected embeddings | extra head-only training stage | mostly helps clean accuracy |
 | `03_encoder_projection.ipynb` | learned encoder predicts the latent z, replacing the random search (plus a hybrid) | extra encoder training stage; denoising uses synonym-perturbed training embeddings | PWWS/TextFooler gains are partly 'trained on similar perturbations'; BERT-Attack is the clean check |
@@ -18,11 +18,11 @@ Goal: each notebook tries one improvement to the paper's Textual Manifold-based 
 `compare()` prints our number next to the paper's TMD number (and the paper's vanilla and best-baseline numbers), plus our own reproduction from notebook 00. A metric is marked **BEATS** only if our number exceeds the paper's TMD by more than the combined 95% sampling noise (about +-3 points per attack column at 1000 examples). Otherwise it reads `tie (within noise)` or `worse`. A single run at one seed cannot establish a small gain: repeat with other seeds before claiming one.
 
 ## Protocol (TextDefender / Li et al. 2021, as in `TextDefender/utils/textattack_utils.py`)
-K=50 candidate substitutes; at most 30% (AG News) or 10% (IMDB, Yelp) of words modified; sentence similarity (USE, angular) >= 0.8408 with window 15; query budget K x number of words; 1000 random test texts with more than 4 words; accuracy under attack counts originally misclassified texts as wrong; clean accuracy on the full test set.
+All attacks run on the authors' vendored TextAttack fork (`TextDefender/textattack`), built like their `build_english_attacker` and counted like their `SimplifidResult` (`tmd_lab.setup_env()` selects it; results go to `results_fork_<tag>.json`). K=50 candidate substitutes; at most 30% (AG News) or 10% (IMDB, Yelp) of words modified; sentence similarity (USE, angular) >= 0.8408 with window 15; query budget K x number of words; 1000 random test texts with more than 4 words; accuracy under attack counts originally misclassified texts as wrong; clean accuracy on the full test set.
 
 ## Known gaps, stated up front
 - **Nothing here has been run by its author.** Expect small API fixes (TextAttack and Colab versions move).
-- Pip `textattack` is used, not the authors' vendored fork, so attack behaviour can differ slightly from theirs.
+- An earlier rebuild of the same attacks on pip `textattack` (kept as `setup_env('pip')`, results in `results_<tag>.json`) matched vanilla and TMD/TextFooler but not TMD/PWWS (47.0 vs the fork's 66.0 on the same model, GAN and examples). Use the fork for every reported number.
 - The authors chose a learning rate by grid search; we use one (2e-5). The InfoGAN search uses 8 trials, theirs was larger.
 - BERT-base only. RoBERTa/XLNet use different embeddings in the paper's code and are not supported here.
 - Cost: with `N_EVAL=1000` the three attacks are slow, especially on TMD (every query runs the projection). Start with `N_EVAL=200` to smoke-test, then raise it. Results are cached per attack, so a disconnected session resumes where it stopped.
