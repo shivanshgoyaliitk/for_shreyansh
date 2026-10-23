@@ -39,6 +39,11 @@ PAPER = {
                       'best_baseline': (95.39, 33.3, 31.2, 43.8)},
 }
 
+# The authors' fine-tuning (src/finetune/*_sweep.yaml + finetune.py): 10 epochs, batch 64, linear decay, a learning-rate
+# grid chosen on validation accuracy, every epoch saved. We cannot afford the grid, so one rate is used, and the final
+# epoch is kept (the wandb sweep compared runs by their last logged validation accuracy).
+PAPER_FT = dict(epochs=10, lr=2e-5, bs=64, keep='last')
+
 # Table 6 (BERT column), max_len from Appendix A.1, modify ratio from Sec. 4.1.
 # NOTE: K = latent_dim (z) and d = code_dim (number of sub-manifolds), as in the authors' sweep configs
 # (src/train/infogan_*_sweep.yaml: latent_dim in {50,100,200}, code_dim in {10..40}).
@@ -471,11 +476,18 @@ class Lab:
         self.model_tag = tag
         return self.model
 
-    def finetune(self, tag='base', epochs=3, lr=3e-5, bs=32, augment_fn=None, aug_prob=0.5):
-        """Fine-tune (or load) the classifier. augment_fn(text)->text is applied to a fraction aug_prob of examples."""
+    def finetune(self, tag='base', epochs=3, lr=3e-5, bs=32, augment_fn=None, aug_prob=0.5, keep='best'):
+        """Fine-tune (or load) the classifier. augment_fn(text)->text is applied to a fraction aug_prob of examples.
+
+        keep='best' saves the epoch with the best validation accuracy; keep='last' saves the final epoch, as the
+        authors' finetune.py + wandb sweep did (see PAPER_FT). Training state is checkpointed after every epoch, so an
+        interrupted run resumes at the next epoch; a DONE marker records that training finished."""
         from transformers import AutoModelForSequenceClassification, get_linear_schedule_with_warmup
         path = self._path(f'finetuned_{tag}')
-        if os.path.exists(os.path.join(path, 'config.json')):
+        state_path = self._path(f'finetune_state_{tag}.pt')
+        done = os.path.join(path, 'DONE')
+        legacy = os.path.exists(os.path.join(path, 'config.json')) and not os.path.exists(state_path)
+        if os.path.exists(done) or legacy:
             print(f'[{tag}] loading fine-tuned model')
             return self.use_model(tag)
         model = AutoModelForSequenceClassification.from_pretrained(self.model_name, num_labels=self.cfg['n_cls']).to(DEV)
@@ -483,8 +495,14 @@ class Lab:
         steps = epochs * math.ceil(len(self.train_ds) / bs)
         sched = get_linear_schedule_with_warmup(opt, 0, steps)
         scaler = torch.cuda.amp.GradScaler(enabled=(self.amp == torch.float16))
-        best = 0.0
-        for ep in range(epochs):
+        best, start = 0.0, 0
+        if os.path.exists(state_path):
+            st = torch.load(state_path, map_location=DEV)
+            model.load_state_dict(st['model']); opt.load_state_dict(st['opt'])
+            sched.load_state_dict(st['sched']); scaler.load_state_dict(st['scaler'])
+            best, start = st['best'], st['epoch']
+            print(f'[{tag}] resuming fine-tuning at epoch {start}')
+        for ep in range(start, epochs):
             model.train()
             t0 = time.time()
             for x, y in self.batches(self.train_ds, bs, shuffle=True):
@@ -501,9 +519,13 @@ class Lab:
                         ok += (model(**self.encode(x)).logits.argmax(-1).cpu() == y).sum().item()
             va = ok / len(self.val_ds)
             print(f'[{tag}] epoch {ep}: val acc {va:.4f} ({time.time() - t0:.0f}s)', flush=True)
-            if va > best:
-                best = va
+            if keep == 'last' or va > best:
                 model.save_pretrained(path)
+            best = max(best, va)
+            torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), sched=sched.state_dict(),
+                            scaler=scaler.state_dict(), best=best, epoch=ep + 1), state_path)
+        open(done, 'w').write(json.dumps(dict(epochs=epochs, lr=lr, bs=bs, keep=keep, best_val=best)))
+        os.remove(state_path)
         del model
         self.model_tag = None
         return self.use_model(tag)

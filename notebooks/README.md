@@ -6,7 +6,7 @@ Goal: each notebook tries one improvement to the paper's Textual Manifold-based 
 
 | Notebook | Improvement | Changes vs the paper | Main risk |
 |---|---|---|---|
-| `00_reproduce_tmd.ipynb` | none: reproduces the paper's TMD and vanilla rows | rebuilt attack constraints on pip `textattack`, single InfoGAN, 3 fine-tuning epochs | if this does not land near Table 1, the other notebooks mean little |
+| `00_reproduce_tmd.ipynb` | none: reproduces the paper's TMD and vanilla rows | authors' fine-tuning recipe (10 epochs, batch 64, final epoch), InfoGAN search, attack rebuilt on pip `textattack` | if this does not land near Table 1, the other notebooks mean little |
 | `01_ensemble_projection.ipynb` | average R projections per query | inference only | R times the projection compute per query |
 | `02_projection_aware_head.ipynb` | fine-tune the classifier head on projected embeddings | extra head-only training stage | mostly helps clean accuracy |
 | `03_encoder_projection.ipynb` | learned encoder predicts the latent z, replacing the random search (plus a hybrid) | extra encoder training stage; denoising uses synonym-perturbed training embeddings | PWWS/TextFooler gains are partly 'trained on similar perturbations'; BERT-Attack is the clean check |
@@ -23,7 +23,7 @@ K=50 candidate substitutes; at most 30% (AG News) or 10% (IMDB, Yelp) of words m
 ## Known gaps, stated up front
 - **Nothing here has been run by its author.** Expect small API fixes (TextAttack and Colab versions move).
 - Pip `textattack` is used, not the authors' vendored fork, so attack behaviour can differ slightly from theirs.
-- The authors kept the best InfoGAN from a random hyperparameter search; notebook 00 trains one.
+- The authors chose a learning rate by grid search; we use one (2e-5). The InfoGAN search uses 8 trials, theirs was larger.
 - BERT-base only. RoBERTa/XLNet use different embeddings in the paper's code and are not supported here.
 - Cost: with `N_EVAL=1000` the three attacks are slow, especially on TMD (every query runs the projection). Start with `N_EVAL=200` to smoke-test, then raise it. Results are cached per attack, so a disconnected session resumes where it stopped.
 - `TMD_colab.ipynb` (repo root) is an earlier, simpler notebook with stock TextAttack settings; it does not follow the paper's protocol and is superseded by this folder.
