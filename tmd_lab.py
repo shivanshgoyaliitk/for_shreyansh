@@ -329,8 +329,17 @@ def project(gan, t, k=20, chunk=256, enc=None, mode='sample', sigma_scale=1.0, n
         c = gan.dis(x)[1].argmax(-1)
         if mode == 'sample':
             z = torch.randn(bs, k, gan.latent_dim, device=x.device)
-        elif mode == 'encoder':
-            z = enc(x, c)[0][:, None]
+        elif mode == 'fixed_bank':  # method 11: the paper's search with one fixed bank of k latents (deterministic TMD)
+            z = _fixed_bank(k, gan.latent_dim, x.device)[None].expand(bs, k, -1)
+        elif mode == 'encoder':  # method 9
+            out = enc(x, c)
+            z = (out[0] if isinstance(out, tuple) else out)[:, None]
+        elif mode == 'enc_local':  # method 10: encoder output + (k-1) draws around it with std sigma_scale; keep closest
+            out = enc(x, c)
+            mu = out[0] if isinstance(out, tuple) else out
+            noise = torch.randn(bs, k, gan.latent_dim, device=x.device) * sigma_scale
+            noise[:, 0] = 0.0
+            z = mu[:, None] + noise
         elif mode == 'hybrid':
             mu, lv = enc(x, c)
             std = (0.5 * lv).exp() * sigma_scale
@@ -346,6 +355,181 @@ def project(gan, t, k=20, chunk=256, enc=None, mode='sample', sigma_scale=1.0, n
         outs.append(fake[torch.arange(bs, device=x.device), m])
         dists.append(d.min(1).values)
     return torch.cat(outs), torch.cat(dists)
+
+
+_BANKS = {}
+
+
+def _fixed_bank(k, latent_dim, device, seed=0):
+    key = (k, latent_dim, str(device), seed)
+    if key not in _BANKS:
+        g = torch.Generator(device='cpu').manual_seed(seed)
+        _BANKS[key] = torch.randn(k, latent_dim, generator=g).to(device)
+    return _BANKS[key]
+
+
+# --------------------------------------------------------------------------
+# Adversarially trained projection encoder (port of the team's infogan_enc.py / train_encoder.py)
+# --------------------------------------------------------------------------
+class ProjEncoder(nn.Module):
+    """E(t, c) -> z (infogan_enc.Encoder): MLP 768 + code -> 1024 -> 512 -> latent, LayerNorm + LeakyReLU(0.2).
+    Conditioning on the sub-manifold id keeps InfoGAN's disconnected structure."""
+
+    def __init__(self, latent_dim, code_dim, emb_dim=768, hidden_dims=(1024, 512)):
+        super().__init__()
+        self.code_dim = code_dim
+        dims = [emb_dim + code_dim] + list(hidden_dims)
+        layers = []
+        for i in range(len(dims) - 1):
+            layers += [nn.Linear(dims[i], dims[i + 1]), nn.LayerNorm(dims[i + 1]), nn.LeakyReLU(0.2, inplace=True)]
+        layers.append(nn.Linear(dims[-1], latent_dim))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, t, c):
+        return self.net(torch.cat([t, F.one_hot(c, self.code_dim).type_as(t)], dim=-1))
+
+
+def typical_set_penalty(z, margin=0.1):
+    """Penalise latents whose norm leaves the N(0, I) typical shell (|z| ~ sqrt(d))."""
+    r = z.norm(dim=-1) / math.sqrt(z.shape[-1])
+    return F.relu(r - (1 + margin)).pow(2).mean()
+
+
+def train_proj_encoder(gan, E_tr, Y_tr=None, E_va=None, Y_va=None, E_aug=None, adv=None, head=None, init=None,
+                       epochs=30, bs=512, lr=1e-3, w_lat=1.0, w_rec=1.0, w_den=0.0, w_typ=0.1, w_adv=1.0,
+                       adv_bs=256, w_cls=0.0, noise_std=0.05, seed=42, log_every=5):
+    """train_encoder.py: G, D/Q and the prior frozen (eval mode), only E trained.
+      L = w_lat ||E(G(z,c),c) - z||^2 + w_rec ||G(E(t,c_t),c_t) - t||^2 + w_den ||G(E(t~,c~),c~) - t||^2
+        + w_typ typical-set + w_adv ||G(E(t_adv,c_a),c_a) - t_clean||^2 + w_cls CE(head(projected), y)
+    adv = (adversarial embeddings, their clean embeddings, labels); init = encoder to start from (previous round)."""
+    torch.manual_seed(seed)
+    gan.eval()
+    for p in gan.parameters():
+        p.requires_grad_(False)
+    enc = ProjEncoder(gan.latent_dim, gan.code_dim).to(DEV)
+    if init is not None:
+        enc.load_state_dict(init.state_dict())
+    if head is not None:
+        head = copy.deepcopy(head).to(DEV).eval()
+        for p in head.parameters():
+            p.requires_grad_(False)
+    assert w_cls == 0 or (head is not None and Y_tr is not None), 'w_cls needs head and Y_tr'
+    opt = torch.optim.Adam(enc.parameters(), lr=lr)
+    prior = torch.softmax(gan.prior.detach(), -1)
+    Etr = E_tr.to(DEV)
+    Ytr = Y_tr.to(DEV) if Y_tr is not None else None
+    Eaug = E_aug.to(DEV) if E_aug is not None else None
+    if adv is not None:
+        adv = tuple(a.to(DEV) for a in adv)
+    zd = gan.latent_dim
+    for ep in range(epochs):
+        enc.train()
+        perm = torch.randperm(len(Etr), device=DEV)
+        logs = dict(lat=0.0, rec=0.0, den=0.0, typ=0.0, adv=0.0, cls=0.0)
+        nb = 0
+        for i in range(0, len(perm), bs):
+            idx = perm[i:i + bs]
+            t = Etr[idx]
+            b = len(t)
+            z = torch.randn(b, zd, device=DEV)
+            c = torch.multinomial(prior, b, replacement=True)
+            with torch.no_grad():
+                tg = gan.gen(z, c)
+            e_tg = enc(tg, c)
+            l_lat = F.mse_loss(e_tg, z)
+            with torch.no_grad():
+                ct = gan.dis(t)[1].argmax(-1)
+            zt = enc(t, ct)
+            rec_t = gan.gen(zt, ct)
+            l_rec = F.mse_loss(rec_t, t)
+            l_cls = F.cross_entropy(head(rec_t), Ytr[idx]) if w_cls > 0 else torch.zeros((), device=DEV)
+            l_typ = typical_set_penalty(torch.cat([zt, e_tg], 0))
+            l_den = torch.zeros((), device=DEV)
+            if w_den > 0:
+                tn = Eaug[idx] if Eaug is not None else (t + noise_std * torch.randn_like(t)).clamp(-1, 1)
+                with torch.no_grad():
+                    cn = gan.dis(tn)[1].argmax(-1)
+                l_den = F.mse_loss(gan.gen(enc(tn, cn), cn), t)
+            l_adv = torch.zeros((), device=DEV)
+            if adv is not None and w_adv > 0:
+                j = torch.randint(0, len(adv[0]), (min(adv_bs, len(adv[0])),), device=DEV)
+                ta, tc, ya = adv[0][j], adv[1][j], adv[2][j]
+                with torch.no_grad():
+                    ca = gan.dis(ta)[1].argmax(-1)
+                rec_a = gan.gen(enc(ta, ca), ca)
+                l_adv = F.mse_loss(rec_a, tc)
+                if w_cls > 0:
+                    l_cls = l_cls + F.cross_entropy(head(rec_a), ya)
+            loss = w_lat * l_lat + w_rec * l_rec + w_den * l_den + w_typ * l_typ + w_adv * l_adv + w_cls * l_cls
+            opt.zero_grad(); loss.backward(); opt.step()
+            for k_, v in zip(logs, (l_lat, l_rec, l_den, l_typ, l_adv, l_cls)):
+                logs[k_] += v.item()
+            nb += 1
+        if E_va is not None and (ep % log_every == log_every - 1 or ep == epochs - 1):
+            th, d = project(gan, E_va[:5000].to(DEV), enc=enc, mode='encoder')
+            msg = f'val RL {d.mean().item():.3f}'
+            if head is not None and Y_va is not None:
+                msg += f', projected val acc {(head(th).argmax(-1).cpu() == Y_va[:5000]).float().mean().item():.4f}'
+            print(f'  encoder epoch {ep + 1}: ' + ' '.join(f'{k_}={v / nb:.4f}' for k_, v in logs.items()) + ', ' + msg,
+                  flush=True)
+    return enc.eval()
+
+
+def train_head_adv(lab, E_tr, Y_tr, adv, epochs=3, lr=1e-3, bs=512, seed=0):
+    """Control for the adversarial encoder: adversarial training of ONLY the classifier head on the same pairs
+    (clean train embeddings + adversarial embeddings with their labels), no GAN and no encoder. If this matches the
+    encoder's transfer robustness, the manifold is not what helps."""
+    torch.manual_seed(seed)
+    head = copy.deepcopy(lab.model.classifier).to(DEV)
+    for p in head.parameters():
+        p.requires_grad_(True)
+    opt = torch.optim.Adam(head.parameters(), lr=lr)
+    Etr, Ytr = E_tr.to(DEV), Y_tr.to(DEV)
+    ta, ya = adv[0].to(DEV), adv[2].to(DEV)
+    for ep in range(epochs):
+        head.train()
+        perm = torch.randperm(len(Etr), device=DEV)
+        for i in range(0, len(perm), bs):
+            idx = perm[i:i + bs]
+            j = torch.randint(0, len(ta), (min(bs // 2, len(ta)),), device=DEV)
+            loss = F.cross_entropy(head(Etr[idx]), Ytr[idx]) + F.cross_entropy(head(ta[j]), ya[j])
+            opt.zero_grad(); loss.backward(); opt.step()
+    return head.eval()
+
+
+def mcnemar(lab, tag_a, tag_b, attack, n):
+    """Exact McNemar test on the same examples: robust = attack failed. Needs per-example logs (fork backend)."""
+    def robust(tag):
+        rows = [json.loads(line) for line in open(examples_path(lab, tag, n, attack))]
+        return {r['i']: r['status'] == 'F' for r in rows if r['status'] != 'D'}
+    a, b = robust(tag_a), robust(tag_b)
+    common = sorted(set(a) & set(b))
+    only_a = sum(a[i] and not b[i] for i in common)
+    only_b = sum(b[i] and not a[i] for i in common)
+    m = only_a + only_b
+    p = min(1.0, 2 * sum(math.comb(m, j) for j in range(min(only_a, only_b) + 1)) / 2 ** m) if m else 1.0
+    return dict(attack=attack, examples=len(common), robust_only_a=only_a, robust_only_b=only_b, p=round(p, 4),
+                a=tag_a, b=tag_b)
+
+
+def transfer_eval(lab, victims, source_tag, attack, n, repeats=5):
+    """Transfer test: texts that the attack fooled on `source_tag` (normally vanilla), fed once to each defense; the
+    attack never queries the defense, so score masking cannot help. Stochastic defenses are averaged over repeats."""
+    import pandas as pd
+    rows = [json.loads(line) for line in open(examples_path(lab, source_tag, n, attack))]
+    rows = [r for r in rows if r['status'] == 'S']
+    clean, adv = [r['text'] for r in rows], [r['adv_text'] for r in rows]
+    y = torch.tensor([r['label'] for r in rows])
+    out = []
+    for name, v in victims.items():
+        stochastic = v.mode != 'none' and v.proj_mode in ('sample', 'enc_local', 'hybrid')
+        reps = repeats if stochastic else 1
+        def acc(texts):
+            pred = torch.cat([v.scores(texts[i:i + 64]).argmax(-1).cpu() for i in range(0, len(texts), 64)])
+            return (pred == y).float().mean().item() * 100
+        out.append(dict(defense=name, n=len(rows), clean_acc=round(sum(acc(clean) for _ in range(reps)) / reps, 1),
+                        adv_acc=round(sum(acc(adv) for _ in range(reps)) / reps, 1)))
+    return pd.DataFrame(out)
 
 
 # --------------------------------------------------------------------------
@@ -606,11 +790,14 @@ class Lab:
         return enc
 
     # ----- attack protocol
-    def attack_pairs(self, n):
-        """TextDefender: keep test texts with more than 4 words, sample n without replacement (seeded)."""
-        texts, labels = self.test_ds['text'], self.test_ds['label']
+    def attack_pairs(self, n, split='test', seed=None):
+        """TextDefender: keep texts with more than 4 words, sample n without replacement (seeded). The test sample for
+        a smaller n is the prefix of the sample for a larger n. split='train' gives adversarial-training material."""
+        ds = {'train': self.train_ds, 'val': self.val_ds, 'test': self.test_ds}[split]
+        texts, labels = ds['text'], ds['label']
         idx = [i for i, t in enumerate(texts) if len(t.split(' ')) > 4]
-        sel = np.random.RandomState(self.seed).choice(idx, size=min(n, len(idx)), replace=False)
+        rs = np.random.RandomState(self.seed if seed is None else seed)
+        sel = rs.choice(idx, size=min(n, len(idx)), replace=False)
         return [(texts[i], int(labels[i])) for i in sel]
 
 
@@ -696,61 +883,105 @@ def _build_attack_fork(name, victim, rho, K=50, sim=0.840845057):
                   attacker.transformation, attacker.search_method)
 
 
-def _run_attack_fork(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
-    """Attack `pairs` in chunks with the fork. Counted like TextDefender's SimplifidResult: accuracy under attack =
-    failed / (succeeded + failed + skipped). The fork silently drops an example whose attack raises an exception
-    (shared/attack.py, attack_dataset); those are excluded, as in the paper's code, and their number is reported."""
+def examples_path(lab, tag, n, attack):
+    """Per-example log of one attack run (fork backend): one JSON line per example, in sample order."""
+    return lab._path(f'examples_fork_{tag}_n{n}_{attack}.jsonl')
+
+
+def _run_attack_fork(lab, victim, name, pairs, log_path, chunk=50):
+    """Attack `pairs` one by one with the fork, appending one JSON line per example to log_path (resumes from it).
+    status: S succeeded, F failed (= robust), K skipped (misclassified before the attack), D dropped (the attack raised
+    an exception; the fork silently drops these). Accuracy under attack is counted like TextDefender's
+    SimplifidResult: F / (S + F + K), dropped examples excluded."""
     import faulthandler
     import gc
     from textattack.attack_results import FailedAttackResult, SkippedAttackResult, SuccessfulAttackResult
     attack = _build_attack_fork(name, victim, lab.cfg['rho'], K=50)
     global _STACK_FILE  # watchdog: if a chunk takes > 3 min, dump every thread's stack to /content/stack_dump.txt
     _STACK_FILE = open('/content/stack_dump.txt' if os.path.isdir('/content') else 'stack_dump.txt', 'w')
-    st = dict(n_requested=len(pairs), done=0, succ=0, fail=0, skip=0, dropped=0, queries=0.0, seconds=0.0)
-    if state:
-        st.update(state)
-    while st['done'] < len(pairs):
-        part = pairs[st['done']:st['done'] + chunk]
-        t0, got = time.time(), 0
-        faulthandler.dump_traceback_later(180, repeat=True, file=_STACK_FILE)
-        for r in attack.attack_dataset(part):
-            got += 1
-            if isinstance(r, SuccessfulAttackResult):
-                st['succ'] += 1
-            elif isinstance(r, FailedAttackResult):
-                st['fail'] += 1
-            elif isinstance(r, SkippedAttackResult):
-                st['skip'] += 1
-            st['queries'] += float(r.perturbed_result.num_queries)
-        faulthandler.cancel_dump_traceback_later()
-        st['dropped'] += len(part) - got
-        st['done'] += len(part)
-        st['seconds'] += time.time() - t0
-        try:
-            attack.clear_cache()
-        except Exception:
-            pass
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        counted = st['succ'] + st['fail'] + st['skip']
-        print(f'    {name}: {st["done"]}/{len(pairs)} done, acc under attack {100 * st["fail"] / max(1, counted):.1f}% '
-              f'(dropped: {st["dropped"]}), {st["seconds"] / 60:.1f} min', flush=True)
-        if on_chunk:
-            on_chunk(dict(st))
-    counted = st['succ'] + st['fail'] + st['skip']
-    return dict(acc=100 * st['fail'] / max(1, counted), acc_counting_dropped_as_wrong=100 * st['fail'] / len(pairs),
-                success_rate=100 * st['succ'] / max(1, st['succ'] + st['fail']),
-                orig_acc=100 * (st['succ'] + st['fail']) / max(1, counted), n=counted, n_requested=len(pairs),
-                dropped=st['dropped'], avg_queries=st['queries'] / max(1, counted), minutes=st['seconds'] / 60)
+    rows = [json.loads(line) for line in open(log_path)] if os.path.exists(log_path) else []
+    rows = [r for r in rows if r['i'] < len(pairs) and r['text'] == pairs[r['i']][0]]
+    if rows:
+        print(f'    {name}: resuming at example {len(rows)}', flush=True)
+    with open(log_path, 'w') as f:  # rewrite the kept rows, then append
+        for r in rows:
+            f.write(json.dumps(r) + '\n')
+    t_run = time.time()
+    with open(log_path, 'a') as f:
+        for i in range(len(rows), len(pairs)):
+            if i % chunk == 0:
+                faulthandler.dump_traceback_later(180, repeat=True, file=_STACK_FILE)
+            text, label = pairs[i]
+            t0 = time.time()
+            res = list(attack.attack_dataset([(text, label)]))
+            row = dict(i=i, label=label, text=text, seconds=round(time.time() - t0, 2), status='D')
+            if res:
+                r = res[0]
+                row['status'] = ('S' if isinstance(r, SuccessfulAttackResult) else 'F' if isinstance(r, FailedAttackResult)
+                                 else 'K' if isinstance(r, SkippedAttackResult) else 'O')
+                row['queries'] = int(r.perturbed_result.num_queries)
+                if row['status'] == 'S':
+                    adv = r.perturbed_result.attacked_text
+                    row['adv_text'] = adv.text
+                    row['pct_changed'] = round(100 * len(adv.all_words_diff(r.original_result.attacked_text))
+                                               / max(1, len(r.original_result.attacked_text.words)), 2)
+            rows.append(row)
+            f.write(json.dumps(row) + '\n'); f.flush()
+            if (i + 1) % chunk == 0 or i + 1 == len(pairs):
+                faulthandler.cancel_dump_traceback_later()
+                try:
+                    attack.clear_cache()
+                except Exception:
+                    pass
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                s_ = summarize_rows(rows)
+                print(f'    {name}: {i + 1}/{len(pairs)} done, acc under attack {s_["acc"]:.1f}% '
+                      f'(dropped: {s_["dropped"]}), {(time.time() - t_run) / 60:.1f} min this session', flush=True)
+    return summarize_rows(rows)
+
+
+def summarize_rows(rows):
+    cnt = {k: sum(r['status'] == k for r in rows) for k in 'SFKD'}
+    counted = cnt['S'] + cnt['F'] + cnt['K']
+    succ = [r for r in rows if r['status'] == 'S']
+    attacked = [r for r in rows if r['status'] in 'SF']
+    return dict(acc=100 * cnt['F'] / max(1, counted), acc_counting_dropped_as_wrong=100 * cnt['F'] / max(1, len(rows)),
+                success_rate=100 * cnt['S'] / max(1, cnt['S'] + cnt['F']), orig_acc=100 * (cnt['S'] + cnt['F']) / max(1, counted),
+                n=counted, n_requested=len(rows), dropped=cnt['D'],
+                avg_queries=float(np.mean([r['queries'] for r in attacked])) if attacked else 0.0,
+                avg_pct_changed=float(np.mean([r['pct_changed'] for r in succ])) if succ else 0.0,
+                minutes=sum(r['seconds'] for r in rows) / 60)
+
+
+def adversarial_pairs(lab, victim, victim_name, attack, n, seed):
+    """Run `attack` on n TRAIN texts (seeded sample) against `victim`; successful attacks become training pairs.
+    Returns (adversarial embeddings, clean embeddings, labels) under the current model. Resumable and cached."""
+    cache = lab._path(f'advpairs_{victim_name}_{attack}_n{n}_s{seed}.pt')
+    if os.path.exists(cache):
+        return torch.load(cache)
+    pairs = lab.attack_pairs(n, split='train', seed=seed)
+    log = lab._path(f'advpairs_{victim_name}_{attack}_n{n}_s{seed}.jsonl')
+    print(f'[pairs] {attack} vs {victim_name} on {n} train texts (seed {seed})', flush=True)
+    _run_attack_fork(lab, victim, attack, pairs, log)
+    rows = [json.loads(line) for line in open(log)]
+    rows = [r for r in rows if r['status'] == 'S']
+    emb = lambda texts: torch.cat([lab.pooled(texts[i:i + 128]).cpu() for i in range(0, len(texts), 128)])
+    out = (emb([r['adv_text'] for r in rows]), emb([r['text'] for r in rows]), torch.tensor([r['label'] for r in rows]))
+    torch.save(out, cache)
+    print(f'[pairs] {len(rows)} successful attacks -> training pairs', flush=True)
+    return out
 
 
 def build_attack(name, victim, rho, K=50, sim=0.840845057):
     return (_build_attack_fork if BACKEND == 'fork' else _build_attack_pip)(name, victim, rho, K, sim)
 
 
-def run_attack(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None):
-    return (_run_attack_fork if BACKEND == 'fork' else _run_attack_pip)(lab, victim, name, pairs, state, chunk, on_chunk)
+def run_attack(lab, victim, name, pairs, state=None, chunk=50, on_chunk=None, log_path=None):
+    if BACKEND == 'fork':
+        return _run_attack_fork(lab, victim, name, pairs, log_path or lab._path(f'examples_fork_adhoc_{name}.jsonl'), chunk)
+    return _run_attack_pip(lab, victim, name, pairs, state, chunk, on_chunk)
 
 
 # ----- pip backend (kept for the record) -----
@@ -928,9 +1159,10 @@ def _run_attack_pip(lab, victim, name, pairs, state=None, chunk=50, on_chunk=Non
                 minutes=st['seconds'] / 60, n=n)
 
 
-def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=1000, chunk=50):  # add 'bertattack' explicitly: it is by far the slowest
-    """Clean accuracy on the full test set + accuracy under each attack. Cached per (dataset, tag).
-    Attacks run in chunks and progress is saved after every chunk, so a disconnect loses at most one chunk."""
+def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=1000, chunk=50, need_log=False):
+    """Clean accuracy on the full test set + accuracy under each attack (add 'bertattack' explicitly: it is the
+    slowest). Cached per (dataset, tag, n); the fork backend also logs every example (examples_path), which McNemar
+    tests and transfer tests need: need_log=True re-runs an attack whose cached result has no such log."""
     path = results_path(lab, tag, n)
     results = json.load(open(path)) if os.path.exists(path) else {}
     if 'clean' not in results:
@@ -940,7 +1172,8 @@ def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=100
     pairs = lab.attack_pairs(n)
     for name in attacks:
         if name in results and results[name].get('n_requested', results[name].get('n')) == len(pairs):
-            continue
+            if not (need_log and BACKEND == 'fork' and not os.path.exists(examples_path(lab, tag, n, name))):
+                continue
         partial = results.get(f'_partial_{name}')
         if partial and partial.get('done', 0) > 0:
             print(f'[{tag}] resuming {name} at example {partial["done"]}', flush=True)
@@ -952,7 +1185,8 @@ def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=100
             results[f'_partial_{name}'] = st
             json.dump(results, open(path, 'w'), indent=1)
 
-        results[name] = run_attack(lab, victim, name, pairs, state=partial, chunk=chunk, on_chunk=save)
+        results[name] = run_attack(lab, victim, name, pairs, state=partial, chunk=chunk, on_chunk=save,
+                                   log_path=examples_path(lab, tag, n, name))
         results.pop(f'_partial_{name}', None)
         print('   ', {k: round(v, 2) for k, v in results[name].items()}, flush=True)
         json.dump(results, open(path, 'w'), indent=1)
