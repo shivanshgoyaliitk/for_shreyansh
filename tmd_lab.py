@@ -860,6 +860,12 @@ def _build_attack_fork(name, victim, rho, K=50, sim=0.840845057):
     from textattack.shared.attack import Attack
     from textattack.transformations import WordSwapEmbedding, WordSwapMaskedLM
     assert 'TextDefender' in textattack.__file__, f'expected the authors\' fork, got {textattack.__file__}'
+    # The fork's masked LM (BERT-Attack) defaults to the authors' local copy of bert-base-uncased
+    # ('/root/manifold_defense/models/bert-base-uncased'; their inline comment gives the original "bert-base-uncased").
+    # Same weights from the Hugging Face hub.
+    WordSwapMaskedLM.__init__.__defaults__ = tuple(
+        'bert-base-uncased' if d == '/root/manifold_defense/models/bert-base-uncased' else d
+        for d in WordSwapMaskedLM.__init__.__defaults__)
 
     wrapper = _fork_wrapper(victim)
     if name == 'pwws':
