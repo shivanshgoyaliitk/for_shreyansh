@@ -334,6 +334,10 @@ def project(gan, t, k=20, chunk=256, enc=None, mode='sample', sigma_scale=1.0, n
         elif mode == 'encoder':  # method 9
             out = enc(x, c)
             z = (out[0] if isinstance(out, tuple) else out)[:, None]
+        elif mode == 'enc_noise':  # encoder output + N(0, sigma_scale^2) noise, ONE draw, no selection: stays near the
+            out = enc(x, c)          # cleaned point (unlike method 10, which picks the candidate closest to the input)
+            mu = out[0] if isinstance(out, tuple) else out
+            z = (mu + sigma_scale * torch.randn_like(mu))[:, None]
         elif mode == 'enc_local':  # method 10: encoder output + (k-1) draws around it with std sigma_scale; keep closest
             out = enc(x, c)
             mu = out[0] if isinstance(out, tuple) else out
@@ -397,8 +401,10 @@ def typical_set_penalty(z, margin=0.1):
 
 def train_proj_encoder(gan, E_tr, Y_tr=None, E_va=None, Y_va=None, E_aug=None, adv=None, head=None, init=None,
                        epochs=30, bs=512, lr=1e-3, w_lat=1.0, w_rec=1.0, w_den=0.0, w_typ=0.1, w_adv=1.0,
-                       adv_bs=256, w_cls=0.0, noise_std=0.05, seed=42, log_every=5):
+                       adv_bs=256, w_cls=0.0, noise_std=0.05, seed=42, log_every=5, select='last', val_adv=None):
     """train_encoder.py: G, D/Q and the prior frozen (eval mode), only E trained.
+    select='best' keeps the epoch with the best validation score = mean of projected clean validation accuracy and
+    projected accuracy on val_adv = (adversarial embeddings, labels) made on VALIDATION texts (never test texts).
       L = w_lat ||E(G(z,c),c) - z||^2 + w_rec ||G(E(t,c_t),c_t) - t||^2 + w_den ||G(E(t~,c~),c~) - t||^2
         + w_typ typical-set + w_adv ||G(E(t_adv,c_a),c_a) - t_clean||^2 + w_cls CE(head(projected), y)
     adv = (adversarial embeddings, their clean embeddings, labels); init = encoder to start from (previous round)."""
@@ -422,6 +428,8 @@ def train_proj_encoder(gan, E_tr, Y_tr=None, E_va=None, Y_va=None, E_aug=None, a
     if adv is not None:
         adv = tuple(a.to(DEV) for a in adv)
     zd = gan.latent_dim
+    assert select == 'last' or (head is not None and E_va is not None and Y_va is not None), 'select=best needs validation'
+    best = None
     for ep in range(epochs):
         enc.train()
         perm = torch.randperm(len(Etr), device=DEV)
@@ -465,13 +473,30 @@ def train_proj_encoder(gan, E_tr, Y_tr=None, E_va=None, Y_va=None, E_aug=None, a
             for k_, v in zip(logs, (l_lat, l_rec, l_den, l_typ, l_adv, l_cls)):
                 logs[k_] += v.item()
             nb += 1
-        if E_va is not None and (ep % log_every == log_every - 1 or ep == epochs - 1):
+        if select == 'best':
+            enc.eval()
+            with torch.no_grad():
+                th = project(gan, E_va[:5000].to(DEV), enc=enc, mode='encoder')[0]
+                clean = (head(th).argmax(-1).cpu() == Y_va[:5000]).float().mean().item()
+                score, adv_acc = clean, None
+                if val_adv is not None:
+                    ta = project(gan, val_adv[0].to(DEV), enc=enc, mode='encoder')[0]
+                    adv_acc = (head(ta).argmax(-1).cpu() == val_adv[1]).float().mean().item()
+                    score = (clean + adv_acc) / 2
+            if best is None or score > best[0]:
+                best = (score, ep + 1, copy.deepcopy(enc.state_dict()))
+            print(f'  encoder epoch {ep + 1}: clean val {clean:.4f}' + (f', adversarial val {adv_acc:.4f}' if adv_acc is not None
+                  else '') + f', score {score:.4f}' + (' *' if best[1] == ep + 1 else ''), flush=True)
+        elif E_va is not None and (ep % log_every == log_every - 1 or ep == epochs - 1):
             th, d = project(gan, E_va[:5000].to(DEV), enc=enc, mode='encoder')
             msg = f'val RL {d.mean().item():.3f}'
             if head is not None and Y_va is not None:
                 msg += f', projected val acc {(head(th).argmax(-1).cpu() == Y_va[:5000]).float().mean().item():.4f}'
             print(f'  encoder epoch {ep + 1}: ' + ' '.join(f'{k_}={v / nb:.4f}' for k_, v in logs.items()) + ', ' + msg,
                   flush=True)
+    if select == 'best':
+        print(f'  kept epoch {best[1]} (validation score {best[0]:.4f})')
+        enc.load_state_dict(best[2])
     return enc.eval()
 
 
@@ -522,7 +547,7 @@ def transfer_eval(lab, victims, source_tag, attack, n, repeats=5):
     y = torch.tensor([r['label'] for r in rows])
     out = []
     for name, v in victims.items():
-        stochastic = v.mode != 'none' and v.proj_mode in ('sample', 'enc_local', 'hybrid')
+        stochastic = v.mode != 'none' and v.proj_mode in ('sample', 'enc_local', 'hybrid', 'enc_noise')
         reps = repeats if stochastic else 1
         def acc(texts):
             pred = torch.cat([v.scores(texts[i:i + 64]).argmax(-1).cpu() for i in range(0, len(texts), 64)])
@@ -961,15 +986,18 @@ def summarize_rows(rows):
                 minutes=sum(r['seconds'] for r in rows) / 60)
 
 
-def adversarial_pairs(lab, victim, victim_name, attack, n, seed):
-    """Run `attack` on n TRAIN texts (seeded sample) against `victim`; successful attacks become training pairs.
-    Returns (adversarial embeddings, clean embeddings, labels) under the current model. Resumable and cached."""
-    cache = lab._path(f'advpairs_{victim_name}_{attack}_n{n}_s{seed}.pt')
+def adversarial_pairs(lab, victim, victim_name, attack, n, seed, split='train'):
+    """Run `attack` on n texts of `split` (seeded sample) against `victim`; successful attacks become pairs.
+    Returns (adversarial embeddings, clean embeddings, labels) under the current model. Resumable and cached.
+    Use split='train' for training material and split='val' for model selection; never 'test'."""
+    assert split != 'test', 'adversarial pairs from test texts would leak the test set'
+    pre = '' if split == 'train' else f'{split}_'
+    cache = lab._path(f'advpairs_{pre}{victim_name}_{attack}_n{n}_s{seed}.pt')
     if os.path.exists(cache):
         return torch.load(cache)
-    pairs = lab.attack_pairs(n, split='train', seed=seed)
-    log = lab._path(f'advpairs_{victim_name}_{attack}_n{n}_s{seed}.jsonl')
-    print(f'[pairs] {attack} vs {victim_name} on {n} train texts (seed {seed})', flush=True)
+    pairs = lab.attack_pairs(n, split=split, seed=seed)
+    log = lab._path(f'advpairs_{pre}{victim_name}_{attack}_n{n}_s{seed}.jsonl')
+    print(f'[pairs] {attack} vs {victim_name} on {n} {split} texts (seed {seed})', flush=True)
     _run_attack_fork(lab, victim, attack, pairs, log)
     rows = [json.loads(line) for line in open(log)]
     rows = [r for r in rows if r['status'] == 'S']
@@ -1165,17 +1193,21 @@ def _run_attack_pip(lab, victim, name, pairs, state=None, chunk=50, on_chunk=Non
                 minutes=st['seconds'] / 60, n=n)
 
 
-def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=1000, chunk=50, need_log=False):
+def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=1000, chunk=50, need_log=False,
+             split='test'):
     """Clean accuracy on the full test set + accuracy under each attack (add 'bertattack' explicitly: it is the
     slowest). Cached per (dataset, tag, n); the fork backend also logs every example (examples_path), which McNemar
-    tests and transfer tests need: need_log=True re-runs an attack whose cached result has no such log."""
+    tests and transfer tests need: need_log=True re-runs an attack whose cached result has no such log.
+    split='val' attacks validation texts instead (pass E_va, Y_va); results are stored under 'val_<tag>'."""
+    if split != 'test':
+        tag = f'{split}_{tag}'
     path = results_path(lab, tag, n)
     results = json.load(open(path)) if os.path.exists(path) else {}
     if 'clean' not in results:
         results['clean'] = dict(acc=100 * victim.clean_accuracy(E_te, Y_te), n=len(E_te))
         json.dump(results, open(path, 'w'), indent=1)
     print(f'[{tag}] clean acc {results["clean"]["acc"]:.2f}')
-    pairs = lab.attack_pairs(n)
+    pairs = lab.attack_pairs(n, split=split)
     for name in attacks:
         if name in results and results[name].get('n_requested', results[name].get('n')) == len(pairs):
             if not (need_log and BACKEND == 'fork' and not os.path.exists(examples_path(lab, tag, n, name))):
@@ -1197,6 +1229,24 @@ def evaluate(lab, victim, tag, E_te, Y_te, attacks=('pwws', 'textfooler'), n=100
         print('   ', {k: round(v, 2) for k, v in results[name].items()}, flush=True)
         json.dump(results, open(path, 'w'), indent=1)
     return results
+
+
+def screen(lab, tags, n, split='val', attacks=('textfooler', 'bertattack')):
+    """Accuracy under each attack (and clean accuracy) for several victims evaluated on the same split and n."""
+    import pandas as pd
+    rows = []
+    for tag in tags:
+        p = results_path(lab, tag if split == 'test' else f'{split}_{tag}', n)
+        if not os.path.exists(p):
+            continue
+        r = json.load(open(p))
+        row = {'variant': tag, 'clean': round(r['clean']['acc'], 2)}
+        for a in attacks:
+            row[METRIC_LABEL[a]] = round(r[a]['acc'], 1) if a in r else None
+        vals = [row[METRIC_LABEL[a]] for a in attacks]
+        row['mean'] = round(sum(vals) / len(vals), 2) if None not in vals else None
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def compare(lab, tag, baseline_tag=None, n=1000):
