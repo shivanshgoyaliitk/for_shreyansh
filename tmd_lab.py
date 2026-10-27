@@ -401,10 +401,13 @@ def typical_set_penalty(z, margin=0.1):
 
 def train_proj_encoder(gan, E_tr, Y_tr=None, E_va=None, Y_va=None, E_aug=None, adv=None, head=None, init=None,
                        epochs=30, bs=512, lr=1e-3, w_lat=1.0, w_rec=1.0, w_den=0.0, w_typ=0.1, w_adv=1.0,
-                       adv_bs=256, w_cls=0.0, noise_std=0.05, seed=42, log_every=5, select='last', val_adv=None):
+                       adv_bs=256, w_cls=0.0, noise_std=0.05, seed=42, log_every=5, select='last', val_adv=None,
+                       swa_from=None):
     """train_encoder.py: G, D/Q and the prior frozen (eval mode), only E trained.
     select='best' keeps the epoch with the best validation score = mean of projected clean validation accuracy and
     projected accuracy on val_adv = (adversarial embeddings, labels) made on VALIDATION texts (never test texts).
+    swa_from=e also averages the weights of epochs e..epochs (stochastic weight averaging, which smooths out the
+    epoch-to-epoch swings of a single checkpoint) and returns (encoder, averaged encoder).
       L = w_lat ||E(G(z,c),c) - z||^2 + w_rec ||G(E(t,c_t),c_t) - t||^2 + w_den ||G(E(t~,c~),c~) - t||^2
         + w_typ typical-set + w_adv ||G(E(t_adv,c_a),c_a) - t_clean||^2 + w_cls CE(head(projected), y)
     adv = (adversarial embeddings, their clean embeddings, labels); init = encoder to start from (previous round)."""
@@ -429,7 +432,19 @@ def train_proj_encoder(gan, E_tr, Y_tr=None, E_va=None, Y_va=None, E_aug=None, a
         adv = tuple(a.to(DEV) for a in adv)
     zd = gan.latent_dim
     assert select == 'last' or (head is not None and E_va is not None and Y_va is not None), 'select=best needs validation'
-    best = None
+
+    @torch.no_grad()
+    def val_score(e):
+        e.eval()
+        th = project(gan, E_va[:5000].to(DEV), enc=e, mode='encoder')[0]
+        clean = (head(th).argmax(-1).cpu() == Y_va[:5000]).float().mean().item()
+        if val_adv is None:
+            return clean, clean, None
+        ta = project(gan, val_adv[0].to(DEV), enc=e, mode='encoder')[0]
+        adv_acc = (head(ta).argmax(-1).cpu() == val_adv[1]).float().mean().item()
+        return (clean + adv_acc) / 2, clean, adv_acc
+
+    best, swa, n_swa = None, None, 0
     for ep in range(epochs):
         enc.train()
         perm = torch.randperm(len(Etr), device=DEV)
@@ -473,16 +488,16 @@ def train_proj_encoder(gan, E_tr, Y_tr=None, E_va=None, Y_va=None, E_aug=None, a
             for k_, v in zip(logs, (l_lat, l_rec, l_den, l_typ, l_adv, l_cls)):
                 logs[k_] += v.item()
             nb += 1
+        if swa_from is not None and ep + 1 >= swa_from:
+            sd = enc.state_dict()
+            if swa is None:
+                swa = {k_: v.detach().float().clone() for k_, v in sd.items()}
+            else:
+                for k_ in swa:
+                    swa[k_] += (sd[k_].float() - swa[k_]) / (n_swa + 1)
+            n_swa += 1
         if select == 'best':
-            enc.eval()
-            with torch.no_grad():
-                th = project(gan, E_va[:5000].to(DEV), enc=enc, mode='encoder')[0]
-                clean = (head(th).argmax(-1).cpu() == Y_va[:5000]).float().mean().item()
-                score, adv_acc = clean, None
-                if val_adv is not None:
-                    ta = project(gan, val_adv[0].to(DEV), enc=enc, mode='encoder')[0]
-                    adv_acc = (head(ta).argmax(-1).cpu() == val_adv[1]).float().mean().item()
-                    score = (clean + adv_acc) / 2
+            score, clean, adv_acc = val_score(enc)
             if best is None or score > best[0]:
                 best = (score, ep + 1, copy.deepcopy(enc.state_dict()))
             print(f'  encoder epoch {ep + 1}: clean val {clean:.4f}' + (f', adversarial val {adv_acc:.4f}' if adv_acc is not None
@@ -497,7 +512,15 @@ def train_proj_encoder(gan, E_tr, Y_tr=None, E_va=None, Y_va=None, E_aug=None, a
     if select == 'best':
         print(f'  kept epoch {best[1]} (validation score {best[0]:.4f})')
         enc.load_state_dict(best[2])
-    return enc.eval()
+    if swa_from is None:
+        return enc.eval()
+    swa_enc = ProjEncoder(gan.latent_dim, gan.code_dim).to(DEV)
+    swa_enc.load_state_dict(swa)
+    if head is not None and E_va is not None and Y_va is not None:
+        score, clean, adv_acc = val_score(swa_enc)
+        print(f'  averaged epochs {swa_from}-{epochs}: clean val {clean:.4f}'
+              + (f', adversarial val {adv_acc:.4f}' if adv_acc is not None else '') + f', score {score:.4f}')
+    return enc.eval(), swa_enc.eval()
 
 
 def train_head_adv(lab, E_tr, Y_tr, adv, epochs=3, lr=1e-3, bs=512, seed=0):
@@ -575,6 +598,29 @@ class SynonymAugmenter:
         return ' '.join(words)
 
 
+class NoiseAugmenter:
+    """Generic word-level noise that uses nothing from any attack (no synonym lists, no attack code, no gradients):
+    a random fraction of the words, drawn uniformly from `rate`, is each masked, deleted or replaced by a random word
+    from the training vocabulary. A model trained to ignore this cannot rely on a handful of words."""
+
+    def __init__(self, texts, rate=(0.1, 0.3), ops=('mask', 'delete', 'random'), top_words=20000, seed=0):
+        from collections import Counter
+        cnt = Counter(w for t in texts for w in t.lower().split())
+        self.vocab = [w for w, _ in cnt.most_common(top_words) if w.isalpha()]
+        self.rate, self.ops = rate, ops
+        self.rng = random.Random(seed)
+
+    def __call__(self, text):
+        words = text.split()
+        if not words:
+            return text
+        k = max(1, round(self.rng.uniform(*self.rate) * len(words)))
+        for i in self.rng.sample(range(len(words)), min(k, len(words))):
+            op = self.rng.choice(self.ops)
+            words[i] = '[MASK]' if op == 'mask' else '' if op == 'delete' else self.rng.choice(self.vocab)
+        return ' '.join(w for w in words if w)
+
+
 # --------------------------------------------------------------------------
 # Victim: language model + (optional) projection + head
 # --------------------------------------------------------------------------
@@ -590,9 +636,15 @@ class Victim:
         self.lab, self.gan, self.enc, self.head = lab, gan, enc, head
         self.mode, self.proj_mode, self.k, self.R, self.combine = mode, proj_mode, k, R, combine
         self.sigma_scale, self.n_prior = sigma_scale, n_prior
+        self.model_tag = lab.model_tag  # the language model this victim was built on (several can share one Lab)
+
+    def _use_model(self):
+        if self.model_tag is not None and self.lab.model_tag != self.model_tag:
+            self.lab.use_model(self.model_tag)
 
     @torch.no_grad()
     def from_emb(self, t):
+        self._use_model()
         head = self.head if self.head is not None else self.lab.model.classifier
         head.eval()
         if self.mode == 'none':
@@ -610,6 +662,7 @@ class Victim:
 
     @torch.no_grad()
     def scores(self, texts):
+        self._use_model()
         return self.from_emb(self.lab.pooled(texts))
 
     def clean_accuracy(self, E, Y, bs=512):
@@ -763,6 +816,99 @@ class Lab:
         self.model_tag = None
         return self.use_model(tag)
 
+    def finetune_robust(self, tag, init='base', epochs=2, lr=1e-5, bs=32, noise_fn=None, adv_texts=None, adv_bs=16,
+                        w_kl=1.0, w_feat=1.0, seed=0, log_every=500):
+        """Continue fine-tuning the saved classifier `init` with consistency training, keeping the final epoch.
+
+        Every step takes a batch of clean training texts, plus their noisy views noise_fn(text) if noise_fn is given,
+        plus adv_bs (clean, adversarial) pairs drawn from adv_texts = [(clean, adversarial, label)] if given.
+        Loss = cross-entropy on every text (each view keeps its clean text's label)
+             + w_kl   * KL(p(clean) || p(view))                    for every (clean, view) pair
+             + w_feat * (1 - cos(pooled(clean), pooled(view)))     for every (clean, view) pair.
+        The second term makes predictions, the third the sentence embedding TMD projects, insensitive to the change.
+        Checkpointed every epoch like finetune(), so an interrupted run resumes at the next epoch."""
+        from transformers import AutoModelForSequenceClassification, get_linear_schedule_with_warmup
+        assert noise_fn is not None or adv_texts, 'nothing to be robust to'
+        path = self._path(f'finetuned_{tag}')
+        state_path = self._path(f'finetune_state_{tag}.pt')
+        done = os.path.join(path, 'DONE')
+        if os.path.exists(done):
+            print(f'[{tag}] loading fine-tuned model')
+            return self.use_model(tag)
+        model = AutoModelForSequenceClassification.from_pretrained(self._path(f'finetuned_{init}')).to(DEV)
+        model.requires_grad_(True)
+        opt = torch.optim.AdamW(model.parameters(), lr=lr)
+        steps = epochs * math.ceil(len(self.train_ds) / bs)
+        sched = get_linear_schedule_with_warmup(opt, int(0.06 * steps), steps)
+        scaler = torch.cuda.amp.GradScaler(enabled=(self.amp == torch.float16))
+        start = 0
+        if os.path.exists(state_path):
+            st = torch.load(state_path, map_location=DEV)
+            model.load_state_dict(st['model']); opt.load_state_dict(st['opt'])
+            sched.load_state_dict(st['sched']); scaler.load_state_dict(st['scaler'])
+            start = st['epoch']
+            print(f'[{tag}] resuming at epoch {start}')
+        rng = random.Random(seed + start)
+        print(f'[{tag}] robust fine-tuning from {init}: {epochs} epochs, lr {lr}, noise views: {noise_fn is not None}, '
+              f'adversarial pairs: {len(adv_texts) if adv_texts else 0}', flush=True)
+        for ep in range(start, epochs):
+            model.train()
+            t0, nb = time.time(), 0
+            logs = dict(ce=0.0, kl=0.0, feat=0.0)
+            for x, y in self.batches(self.train_ds, bs, shuffle=True):
+                x, y = list(x), y.to(DEV)
+                texts, labels, pairs = list(x), [y], []
+                if noise_fn is not None:
+                    texts += [noise_fn(s) for s in x]
+                    labels.append(y)
+                    pairs += [(i, len(x) + i) for i in range(len(x))]
+                if adv_texts:
+                    sel = [adv_texts[rng.randrange(len(adv_texts))] for _ in range(adv_bs)]
+                    o = len(texts)
+                    texts += [s[0] for s in sel] + [s[1] for s in sel]
+                    ya = torch.tensor([s[2] for s in sel], device=DEV)
+                    labels += [ya, ya]
+                    pairs += [(o + i, o + adv_bs + i) for i in range(adv_bs)]
+                with torch.autocast('cuda', dtype=self.amp):
+                    pooled = model.bert(**self.encode(texts)).pooler_output
+                    logits = model.classifier(model.dropout(pooled))
+                logits, pooled = logits.float(), pooled.float()
+                ce = F.cross_entropy(logits, torch.cat(labels))
+                a = torch.tensor([p[0] for p in pairs], device=DEV)
+                b = torch.tensor([p[1] for p in pairs], device=DEV)
+                kl = F.kl_div(F.log_softmax(logits[b], -1), F.softmax(logits[a], -1), reduction='batchmean')
+                feat = (1 - F.cosine_similarity(pooled[a], pooled[b], dim=-1)).mean()
+                loss = ce + w_kl * kl + w_feat * feat
+                opt.zero_grad(); scaler.scale(loss).backward(); scaler.step(opt); scaler.update(); sched.step()
+                for k_, v in zip(logs, (ce, kl, feat)):
+                    logs[k_] += v.item()
+                nb += 1
+                if nb % log_every == 0:
+                    print(f'  [{tag}] epoch {ep} step {nb}: ' + ', '.join(f'{k_} {v / nb:.4f}' for k_, v in logs.items()),
+                          flush=True)
+            model.eval()
+            ok = ok_noisy = 0
+            with torch.no_grad():
+                for x, yv in self.batches(self.val_ds, 256):
+                    with torch.autocast('cuda', dtype=self.amp):
+                        ok += (model(**self.encode(x)).logits.argmax(-1).cpu() == yv).sum().item()
+                        if noise_fn is not None:
+                            xn = [noise_fn(s) for s in x]
+                            ok_noisy += (model(**self.encode(xn)).logits.argmax(-1).cpu() == yv).sum().item()
+            msg = f'val acc {ok / len(self.val_ds):.4f}'
+            if noise_fn is not None:
+                msg += f', val acc on noisy views {ok_noisy / len(self.val_ds):.4f}'
+            print(f'[{tag}] epoch {ep}: {msg} ({time.time() - t0:.0f}s)', flush=True)
+            model.save_pretrained(path)
+            torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), sched=sched.state_dict(),
+                            scaler=scaler.state_dict(), epoch=ep + 1), state_path)
+        open(done, 'w').write(json.dumps(dict(init=init, epochs=epochs, lr=lr, bs=bs, w_kl=w_kl, w_feat=w_feat,
+                                              noise=noise_fn is not None, adv_pairs=len(adv_texts or []))))
+        os.remove(state_path)
+        del model
+        self.model_tag = None
+        return self.use_model(tag)
+
     @torch.no_grad()
     def pooled(self, texts):
         """Text embedding t = F(x): BERT pooler output (tanh, in [-1, 1])."""
@@ -785,9 +931,11 @@ class Lab:
         torch.save(out, path)
         return out
 
-    def get_gan(self, tag, E_tr, E_va, epochs=100, bs=1024):
+    def get_gan(self, tag, E_tr, E_va, epochs=100, bs=1024, use_search=True):
+        """The InfoGAN for model `tag`: the winner of search_gans if one exists (and use_search), otherwise one GAN
+        with the paper's Table 6 hyperparameters (CFG), trained once and cached."""
         meta = self._path(f'infogan_{tag}_best.json')
-        if os.path.exists(meta):  # a hyperparameter search (search_gans) already picked a winner
+        if use_search and os.path.exists(meta):  # a hyperparameter search (search_gans) already picked a winner
             hp = json.load(open(meta))['hp']
             gan = InfoGAN(latent_dim=hp['K'], code_dim=hp['d']).to(DEV)
             gan.load_state_dict(torch.load(self._path(f'infogan_{tag}_best.pt')))
@@ -797,8 +945,9 @@ class Lab:
         gan = InfoGAN(latent_dim=self.cfg['K'], code_dim=self.cfg['d']).to(DEV)
         if os.path.exists(path):
             gan.load_state_dict(torch.load(path))
-            print(f'[{tag}] loaded InfoGAN')
+            print(f'[{tag}] loaded InfoGAN (Table 6 hyperparameters)')
             return gan.eval()
+        print(f'[{tag}] training InfoGAN with the paper\'s Table 6 hyperparameters', flush=True)
         gan = train_gan(E_tr, E_va, self.cfg, epochs=epochs, bs=bs, seed=self.seed)
         torch.save(gan.state_dict(), path)
         return gan
@@ -858,6 +1007,7 @@ def _fork_wrapper(victim):
     class VictimWrapper(ModelWrapper):
         def __init__(self, victim):
             self.victim = victim
+            victim._use_model()
             self.model = victim.lab.model
 
         def __call__(self, text_list):
@@ -1001,10 +1151,34 @@ def adversarial_pairs(lab, victim, victim_name, attack, n, seed, split='train'):
     _run_attack_fork(lab, victim, attack, pairs, log)
     rows = [json.loads(line) for line in open(log)]
     rows = [r for r in rows if r['status'] == 'S']
-    emb = lambda texts: torch.cat([lab.pooled(texts[i:i + 128]).cpu() for i in range(0, len(texts), 128)])
-    out = (emb([r['adv_text'] for r in rows]), emb([r['text'] for r in rows]), torch.tensor([r['label'] for r in rows]))
+    out = (embed_texts(lab, [r['adv_text'] for r in rows]), embed_texts(lab, [r['text'] for r in rows]),
+           torch.tensor([r['label'] for r in rows]))
     torch.save(out, cache)
     print(f'[pairs] {len(rows)} successful attacks -> training pairs', flush=True)
+    return out
+
+
+def embed_texts(lab, texts, bs=128):
+    """Pooled embeddings of a list of texts under the current model (CPU)."""
+    return torch.cat([lab.pooled(texts[i:i + bs]).cpu() for i in range(0, len(texts), bs)])
+
+
+def adversarial_texts(lab, split='train', exclude=()):
+    """[(clean text, adversarial text, label)] of every successful attack logged by adversarial_pairs on `split`
+    (attacks on training or validation texts, whichever victim they were run against; never test texts).
+    Logs whose file name contains any string in `exclude` are skipped (e.g. rounds run later in a notebook)."""
+    import glob
+    assert split in ('train', 'val'), 'adversarial texts exist only for training and validation texts'
+    out, seen = [], set()
+    for p in sorted(glob.glob(lab._path('advpairs_*.jsonl'))):
+        name = os.path.basename(p)
+        if name.startswith('advpairs_val_') != (split == 'val') or any(s in name for s in exclude):
+            continue
+        for line in open(p):
+            r = json.loads(line)
+            if r['status'] == 'S' and (r['text'], r['adv_text']) not in seen:
+                seen.add((r['text'], r['adv_text']))
+                out.append((r['text'], r['adv_text'], r['label']))
     return out
 
 
