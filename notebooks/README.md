@@ -2,7 +2,7 @@
 
 Goal: each notebook tries one improvement to the paper's Textual Manifold-based Defense and checks it against the benchmark the authors report (Table 1, BERT rows), using the paper's own attack protocol.
 
-**Run order:** `00` first, then any of `01`-`04` in any order; `05` → `06` → `07` → `07b` build on each other. They share one cache folder on Google Drive (`/MyDrive/tmd_run_paperft/<dataset>/`; the earlier 3-epoch runs stay in `/MyDrive/tmd_run/`): the fine-tuned model, embeddings, InfoGAN and results, so nothing is trained twice.
+**Run order:** `00` first, then any of `01`-`04` in any order; `05` → `06` → `07` → `07b` build on each other. `08` (checks and analysis for the report) needs `00`, `05`, `06`; `09` collects every saved result into the report's tables and figures (CPU runtime is enough; re-run it after any notebook finishes). They share one cache folder on Google Drive (`/MyDrive/tmd_run_paperft/<dataset>/`; the earlier 3-epoch runs stay in `/MyDrive/tmd_run/`): the fine-tuned model, embeddings, InfoGAN and results, so nothing is trained twice.
 
 | Notebook | Improvement | Changes vs the paper | Main risk |
 |---|---|---|---|
