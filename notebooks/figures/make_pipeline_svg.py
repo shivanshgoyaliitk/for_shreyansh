@@ -101,9 +101,9 @@ text(20, 36, 'TMD vs our defense', 22, 'bold')
 box(865, 14, 150, 30, ['changed in ours'], NEW, size=13)
 box(1030, 14, 150, 30, ['training only'], TRAIN, dashed=True, size=13)
 
-lane(66, 'Original TMD', ['BERT'], ['Random search', 'closest of 30 samples'],
+lane(66, 'Original TMD', ['BERT'], ['Random search', 'closest of 30 G(z, c)'],
      'trained on clean sentences', 'GAN trained on clean embeddings', 'random on every query', False)
-lane(276, 'Ours', ['BERT', 'adversarially trained'], ['Learned encoder', 'one step, no guessing'],
+lane(276, 'Ours', ['BERT', 'adversarially trained'], ['Learned encoder', 'z = E(t, c), then G(z, c)'],
      'also trained on attacked training sentences', 'encoder learns: attacked → clean', 'deterministic', True)
 
 box(20, 482, 1160, 32, ['Same evaluation for both: the authors\' attack code on 1000 test sentences'], SAME, size=14)

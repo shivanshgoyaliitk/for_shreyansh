@@ -16,7 +16,7 @@
 <text x="485.0" y="149.0" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="middle" fill="#1f2933">pick a piece</text>
 <rect x="600" y="102" width="225" height="64" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
 <text x="712.5" y="129.0" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#1f2933">Random search</text>
-<text x="712.5" y="149.0" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="middle" fill="#1f2933">closest of 30 samples</text>
+<text x="712.5" y="149.0" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="middle" fill="#1f2933">closest of 30 G(z, c)</text>
 <rect x="915" y="102" width="120" height="64" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
 <text x="975.0" y="139.0" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#1f2933">Classifier</text>
 <rect x="1070" y="102" width="110" height="64" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
@@ -47,7 +47,7 @@
 <text x="485.0" y="359.0" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="middle" fill="#1f2933">pick a piece</text>
 <rect x="600" y="312" width="225" height="64" rx="10" fill="#fde8d4" stroke="#d9822b" stroke-width="2"/>
 <text x="712.5" y="339.0" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#1f2933">Learned encoder</text>
-<text x="712.5" y="359.0" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="middle" fill="#1f2933">one step, no guessing</text>
+<text x="712.5" y="359.0" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="middle" fill="#1f2933">z = E(t, c), then G(z, c)</text>
 <rect x="915" y="312" width="120" height="64" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
 <text x="975.0" y="349.0" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#1f2933">Classifier</text>
 <rect x="1070" y="312" width="110" height="64" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
