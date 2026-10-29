@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="925" viewBox="0 0 1200 925">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#52606d"/></marker></defs>
+<rect width="1200" height="925" fill="#ffffff"/>
+<text x="20" y="34" font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="bold" font-style="normal" text-anchor="start" fill="#1f2933">The original TMD vs our defense: what changes</text>
+<rect x="700" y="14" width="150" height="30" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="775.0" y="33.0" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">unchanged</text>
+<rect x="865" y="14" width="150" height="30" rx="10" fill="#fde8d4" stroke="#d9822b" stroke-width="2"/>
+<text x="940.0" y="33.0" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">changed in ours</text>
+<rect x="1030" y="14" width="150" height="30" rx="10" fill="#ffffff" stroke="#9aa5b4" stroke-width="2" stroke-dasharray="6,4"/>
+<text x="1105.0" y="33.0" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">training time only</text>
+<text x="20" y="82" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="bold" font-style="normal" text-anchor="start" fill="#1f2933">Original TMD (Nguyen Minh et al., EMNLP 2022)</text>
+<rect x="20" y="104" width="110" height="84" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="75.0" y="150.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">Sentence x</text>
+<rect x="170" y="104" width="160" height="84" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="250.0" y="131.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">BERT</text>
+<text x="250.0" y="150.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">fine-tuned on</text>
+<text x="250.0" y="169.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">clean sentences</text>
+<rect x="415" y="104" width="140" height="84" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="485.0" y="131.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">Q(c | t)</text>
+<text x="485.0" y="150.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">which piece of the</text>
+<text x="485.0" y="169.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">manifold?</text>
+<rect x="625" y="104" width="240" height="84" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="745.0" y="131.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">Random search</text>
+<text x="745.0" y="150.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">30 random z, generate G(z, c),</text>
+<text x="745.0" y="169.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">keep the one closest to t</text>
+<rect x="950" y="104" width="130" height="84" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="1015.0" y="131.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">Classifier</text>
+<text x="1015.0" y="150.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">BERT's own</text>
+<text x="1015.0" y="169.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">layer</text>
+<rect x="1110" y="104" width="70" height="84" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="1145.0" y="150.66666666666666" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">Label</text>
+<line x1="130" y1="146.0" x2="166" y2="146.0" stroke="#52606d" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="330" y1="146.0" x2="411" y2="146.0" stroke="#52606d" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="370.5" y="138.0" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">embedding t</text>
+<line x1="555" y1="146.0" x2="621" y2="146.0" stroke="#52606d" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="588.0" y="138.0" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">piece c</text>
+<line x1="865" y1="146.0" x2="946" y2="146.0" stroke="#52606d" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="905.5" y="138.0" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">projected t̂</text>
+<line x1="1080" y1="146.0" x2="1106" y2="146.0" stroke="#52606d" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="20" y="222" width="310" height="92" rx="10" fill="#ffffff" stroke="#9aa5b4" stroke-width="2" stroke-dasharray="6,4"/>
+<text x="175.0" y="263.3333333333333" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">BERT training</text>
+<text x="175.0" y="281.3333333333333" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">clean training sentences only</text>
+<rect x="415" y="222" width="450" height="92" rx="10" fill="#ffffff" stroke="#9aa5b4" stroke-width="2" stroke-dasharray="6,4"/>
+<text x="640.0" y="254.33333333333334" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">InfoGAN training (generator G, helper Q)</text>
+<text x="640.0" y="272.33333333333337" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">on embeddings of clean training sentences.</text>
+<text x="640.0" y="290.33333333333337" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">Never sees an attack.</text>
+<line x1="250" y1="222" x2="250" y2="192" stroke="#9aa5b4" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<line x1="485" y1="222" x2="485" y2="192" stroke="#9aa5b4" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<line x1="745" y1="222" x2="745" y2="192" stroke="#9aa5b4" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<text x="1065" y="264.0" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" font-style="normal" text-anchor="middle" fill="#52606d">Random</text>
+<text x="1065" y="283.0" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">a new projection on every query</text>
+<text x="20" y="352" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="bold" font-style="normal" text-anchor="start" fill="#1f2933">Ours (notebook 07b)</text>
+<rect x="20" y="374" width="110" height="84" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="75.0" y="420.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">Sentence x</text>
+<rect x="170" y="374" width="160" height="84" rx="10" fill="#fde8d4" stroke="#d9822b" stroke-width="2"/>
+<text x="250.0" y="401.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">BERT</text>
+<text x="250.0" y="420.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">adversarially</text>
+<text x="250.0" y="439.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">trained</text>
+<rect x="415" y="374" width="140" height="84" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="485.0" y="401.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">Q(c | t)</text>
+<text x="485.0" y="420.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">which piece of the</text>
+<text x="485.0" y="439.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">manifold?</text>
+<rect x="625" y="374" width="240" height="84" rx="10" fill="#fde8d4" stroke="#d9822b" stroke-width="2"/>
+<text x="745.0" y="401.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">Learned encoder</text>
+<text x="745.0" y="420.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">E(t, c) predicts z in one pass,</text>
+<text x="745.0" y="439.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">then G(z, c)</text>
+<rect x="950" y="374" width="130" height="84" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="1015.0" y="401.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">Classifier</text>
+<text x="1015.0" y="420.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">BERT's own</text>
+<text x="1015.0" y="439.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">layer</text>
+<rect x="1110" y="374" width="70" height="84" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="1145.0" y="420.6666666666667" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">Label</text>
+<line x1="130" y1="416.0" x2="166" y2="416.0" stroke="#52606d" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="330" y1="416.0" x2="411" y2="416.0" stroke="#52606d" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="370.5" y="408.0" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">embedding t</text>
+<line x1="555" y1="416.0" x2="621" y2="416.0" stroke="#52606d" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="588.0" y="408.0" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">piece c</text>
+<line x1="865" y1="416.0" x2="946" y2="416.0" stroke="#52606d" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="905.5" y="408.0" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">projected t̂</text>
+<line x1="1080" y1="416.0" x2="1106" y2="416.0" stroke="#52606d" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="20" y="492" width="310" height="92" rx="10" fill="#ffffff" stroke="#9aa5b4" stroke-width="2" stroke-dasharray="6,4"/>
+<text x="175.0" y="515.3333333333334" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">BERT training: clean + attacked training</text>
+<text x="175.0" y="533.3333333333334" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">sentences (black-box attacks, 2 rounds)</text>
+<text x="175.0" y="551.3333333333334" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">+ random-noise copies; taught to give the</text>
+<text x="175.0" y="569.3333333333334" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">same answer and embedding for both</text>
+<rect x="415" y="492" width="450" height="92" rx="10" fill="#ffffff" stroke="#9aa5b4" stroke-width="2" stroke-dasharray="6,4"/>
+<text x="640.0" y="515.3333333333334" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">InfoGAN: the paper's Table 6 settings, new embeddings.</text>
+<text x="640.0" y="533.3333333333334" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">Encoder (Cengiz's design), G frozen: send attacked</text>
+<text x="640.0" y="551.3333333333334" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">embeddings back to their clean point; plus</text>
+<text x="640.0" y="569.3333333333334" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">consistency, reconstruction and label losses.</text>
+<line x1="250" y1="492" x2="250" y2="462" stroke="#9aa5b4" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<line x1="485" y1="492" x2="485" y2="462" stroke="#9aa5b4" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<line x1="745" y1="492" x2="745" y2="462" stroke="#9aa5b4" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<text x="1065" y="534.0" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" font-style="normal" text-anchor="middle" fill="#d9822b">Deterministic</text>
+<text x="1065" y="553.0" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">same input, same output</text>
+<rect x="20" y="612" width="1160" height="34" rx="10" fill="#eef2f7" stroke="#6b7a90" stroke-width="2"/>
+<text x="600.0" y="633.3333333333334" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="middle" fill="#1f2933">Evaluation, identical for both: the authors' attack code (PWWS, TextFooler, BERT-Attack), 1000 test sentences, at most 30% of words changed, sentence similarity ≥ 0.84</text>
+<text x="20" y="690" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="bold" font-style="normal" text-anchor="start" fill="#1f2933">What is the embedding t?</text>
+<text x="20" y="716" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="start" fill="#1f2933">BERT turns each sentence into 768 numbers</text>
+<text x="20" y="734" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="start" fill="#1f2933">that summarise its meaning: a point in space.</text>
+<text x="20" y="752" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="start" fill="#1f2933">The classifier only ever sees this point.</text>
+<text x="20" y="770" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="start" fill="#1f2933"></text>
+<text x="20" y="788" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="start" fill="#1f2933">Clean sentences of one topic lie on a curved</text>
+<text x="20" y="806" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="start" fill="#1f2933">band (the "manifold"); the GAN learns the bands.</text>
+<text x="20" y="824" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="start" fill="#1f2933"></text>
+<text x="20" y="842" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="start" fill="#1f2933">An attack swaps a few words, so the point moves</text>
+<text x="20" y="860" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="start" fill="#1f2933">off its band and the classifier is fooled.</text>
+<text x="20" y="878" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="normal" text-anchor="start" fill="#1f2933"></text>
+<text x="20" y="896" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" font-style="italic" text-anchor="start" fill="#52606d">Schematic, not real data.</text>
+<text x="580" y="708" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">1. An attack moves t</text>
+<rect x="470" y="720" width="220" height="150" rx="8" fill="#fbfcfd" stroke="#d5dbe3"/>
+<path d="M 485 815 Q 570 745 675 775" fill="none" stroke="#9ec5f0" stroke-width="16" stroke-linecap="round" opacity="0.8"/>
+<path d="M 485 855 Q 580 805 675 845" fill="none" stroke="#b5e0b0" stroke-width="16" stroke-linecap="round" opacity="0.8"/>
+<text x="678" y="764" font-family="Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" text-anchor="end" fill="#2f6fb0">World</text>
+<text x="678" y="866" font-family="Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" text-anchor="end" fill="#3d8b37">Sports</text>
+<circle cx="575" cy="770" r="5" fill="#2f6fb0"/>
+<line x1="575" y1="776" x2="590" y2="810" stroke="#c0392b" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<circle cx="590" cy="818" r="5" fill="#c0392b"/>
+<text x="598" y="800" font-family="Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" text-anchor="start" fill="#c0392b">attacked</text>
+<text x="820" y="708" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">2. TMD: random guesses</text>
+<rect x="710" y="720" width="220" height="150" rx="8" fill="#fbfcfd" stroke="#d5dbe3"/>
+<path d="M 725 815 Q 810 745 915 775" fill="none" stroke="#9ec5f0" stroke-width="16" stroke-linecap="round" opacity="0.8"/>
+<path d="M 725 855 Q 820 805 915 845" fill="none" stroke="#b5e0b0" stroke-width="16" stroke-linecap="round" opacity="0.8"/>
+<text x="918" y="764" font-family="Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" text-anchor="end" fill="#2f6fb0">World</text>
+<text x="918" y="866" font-family="Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" text-anchor="end" fill="#3d8b37">Sports</text>
+<circle cx="815" cy="770" r="5" fill="#2f6fb0"/>
+<circle cx="828" cy="800" r="5" fill="#c0392b"/>
+<circle cx="738.728" cy="804.44" r="4" fill="#8a96a8"/>
+<circle cx="763.3679999999999" cy="789.04" r="4" fill="#8a96a8"/>
+<circle cx="792.488" cy="776.24" r="4" fill="#8a96a8"/>
+<circle cx="838.088" cy="766.64" r="4" fill="#8a96a8" stroke="#d9822b" stroke-width="3"/>
+<circle cx="869.768" cy="766.64" r="4" fill="#8a96a8"/>
+<circle cx="900.398" cy="771.29" r="4" fill="#8a96a8"/>
+<line x1="830" y1="793" x2="837" y2="774" stroke="#d9822b" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<text x="1060" y="708" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" font-style="normal" text-anchor="middle" fill="#1f2933">3. Ours</text>
+<rect x="950" y="720" width="220" height="150" rx="8" fill="#fbfcfd" stroke="#d5dbe3"/>
+<path d="M 965 815 Q 1050 745 1155 775" fill="none" stroke="#9ec5f0" stroke-width="16" stroke-linecap="round" opacity="0.8"/>
+<path d="M 965 855 Q 1060 805 1155 845" fill="none" stroke="#b5e0b0" stroke-width="16" stroke-linecap="round" opacity="0.8"/>
+<text x="1158" y="764" font-family="Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" text-anchor="end" fill="#2f6fb0">World</text>
+<text x="1158" y="866" font-family="Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" text-anchor="end" fill="#3d8b37">Sports</text>
+<circle cx="1055" cy="770" r="5" fill="#2f6fb0"/>
+<circle cx="1072" cy="802" r="5" fill="#c0392b"/>
+<line x1="1069" y1="795" x2="1059" y2="779" stroke="#d9822b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="580" y="890" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">pushed off its band,</text>
+<text x="580" y="906" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">near the wrong topic</text>
+<text x="820" y="890" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">closest of 30 guesses on a band;</text>
+<text x="820" y="906" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">a new pick on every query</text>
+<text x="1060" y="890" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">robust BERT moves it less;</text>
+<text x="1060" y="906" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" text-anchor="middle" fill="#52606d">the encoder maps it straight back</text>
+</svg>
