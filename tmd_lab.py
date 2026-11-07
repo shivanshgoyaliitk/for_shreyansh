@@ -29,7 +29,8 @@ import torch.nn.functional as F
 # Paper numbers (Table 1, BERT rows) and per-dataset configuration
 # --------------------------------------------------------------------------
 METRICS = ['clean', 'pwws', 'textfooler', 'bertattack']
-METRIC_LABEL = {'clean': 'clean acc', 'pwws': 'PWWS', 'textfooler': 'TextFooler', 'bertattack': 'BERT-Attack'}
+METRIC_LABEL = {'clean': 'clean acc', 'pwws': 'PWWS', 'textfooler': 'TextFooler', 'bertattack': 'BERT-Attack',
+                'deepwordbug': 'DeepWordBug'}
 
 # order: clean accuracy, PWWS, TextFooler, BERT-Attack (accuracy under attack, %)
 PAPER = {
@@ -1024,7 +1025,8 @@ def _fork_wrapper(victim):
 
 
 def _build_attack_fork(name, victim, rho, K=50, sim=0.840845057):
-    """build_english_attacker (TextDefender/utils/textattack_utils.py) for pwws, textfooler and bae (BERT-Attack)."""
+    """build_english_attacker (TextDefender/utils/textattack_utils.py) for pwws, textfooler, bae (BERT-Attack) and
+    deepwordbug (character-level typos; the authors' benchmark has it, the TMD paper does not use it)."""
     import textattack
     from textattack.attack_recipes import BERTAttackLi2020, PWWSRen2019, TextFoolerJin2019
     from textattack.constraints.overlap import MaxWordsPerturbed
@@ -1047,6 +1049,15 @@ def _build_attack_fork(name, victim, rho, K=50, sim=0.840845057):
         attacker = PWWSRen2019.build(wrapper)
     elif name == 'textfooler':
         attacker = TextFoolerJin2019.build(wrapper)
+    elif name == 'deepwordbug':
+        from textattack.attack_recipes import DeepWordBugGao2018
+        from textattack.transformations import (RandomCompositeTransformation, WordSwapNeighboringCharacterSwap,
+                                                WordSwapRandomCharacterDeletion, WordSwapRandomCharacterInsertion,
+                                                WordSwapRandomCharacterSubstitution)
+        attacker = DeepWordBugGao2018.build(wrapper)
+        attacker.transformation = RandomCompositeTransformation(
+            [WordSwapNeighboringCharacterSwap(), WordSwapRandomCharacterSubstitution(),
+             WordSwapRandomCharacterDeletion(), WordSwapRandomCharacterInsertion()], total_count=K)
     else:
         attacker = BERTAttackLi2020.build(wrapper)
         attacker.transformation = WordSwapMaskedLM(method='bert-attack', max_candidates=K)
