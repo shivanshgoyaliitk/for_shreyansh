@@ -39,7 +39,7 @@ A Deterministic, Attack-Aware Projection for Textual Manifold-based Defense
 
 **Adversarially trained BERT.**
 - We continue fine-tuning BERT on clean sentences, randomly perturbed sentences (word masking, deletion, random words) and attacked training sentences.
-- The loss is cross-entropy plus a KL term and a cosine term that pull a perturbed or attacked sentence's prediction and embedding towards those of its clean version.
+- TMD fine-tunes BERT with cross-entropy only. We add adversarial training: cross-entropy on clean, randomly perturbed and attacked training sentences, plus two consistency terms for each (clean, perturbed or attacked) pair: the KL divergence between their predicted class distributions (as in TRADES) and one minus the cosine similarity of their pooled embeddings. Both weights are 1 and were not tuned; the three terms were not ablated separately.
 - Attacked sentences come from running TextFooler, BERT-Attack and PWWS as black boxes on training sentences, in two rounds: against plain BERT, then against the first robust BERT. No attack internals (candidate lists, synonym tables) are used.
 
 **Manifold.**
@@ -209,4 +209,6 @@ TextFooler / BERT-Attack accuracy under attack (%):
 - Gao, J.; et al. 2018. Black-box Generation of Adversarial Text Sequences to Evade Deep Learning Classifiers (DeepWordBug). IEEE S&P Workshops.
 - Jin, D.; et al. 2020. TextFooler. AAAI. · Li, L.; et al. 2020. BERT-Attack. EMNLP. · Ren, S.; et al. 2019. PWWS. ACL.
 - Chen, X.; et al. 2016. InfoGAN. NeurIPS.
+- Zhang, H.; et al. 2019. Theoretically Principled Trade-off between Robustness and Accuracy (TRADES). ICML.
+- Goodfellow, I.; Shlens, J.; and Szegedy, C. 2015. Explaining and Harnessing Adversarial Examples. ICLR.
 - Athalye, A.; Carlini, N.; and Wagner, D. 2018. Obfuscated Gradients Give a False Sense of Security. ICML.
