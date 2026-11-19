@@ -44,7 +44,7 @@ Finally, we tried a completely different attack: Deep Word Bug, which makes typo
 
 ## Slide 10: what to take away (about 35 seconds)
 
-To sum up. Our defense is far ahead of the paper's adversarial-training defenses. It holds on typos it never saw. And it is deterministic, at one point one times the cost of plain Bert, against about two times for T M D. It also has limits. It learns from attacks, and T M D does not. We tested one dataset and one model. And our two training seeds differ by about eight points. Thank you for watching.
+So what did we learn? Replacing T M D's random guess with a learned step, on top of a Bert that has seen attacks, gives a much stronger defense. It is far ahead of the paper's other attack-aware defenses, and it holds up against typos it never saw. It also gives the same answer every time, and runs almost as fast as plain Bert. The limits: it learns from attacks and T M D does not, we tested one dataset and one model, and our two training runs differ by about eight points. Our main lesson: a defense should learn where to project, not guess. Thank you.
 
 ---
 
