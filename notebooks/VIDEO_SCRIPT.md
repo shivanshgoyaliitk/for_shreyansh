@@ -12,7 +12,7 @@ This is our project for Deep Learning, A I sixty-one-oh-three. We extend Textual
 
 ## Slide 2: a few swapped words flip the label (about 25 seconds)
 
-Text classifiers can be fooled by changing just a few words. An attacker swaps words for near-synonyms. A person still reads the same meaning, but the model changes its answer. On the A G News dataset, a standard Bert model is ninety-four percent accurate on clean sentences. Under three common word-swap attacks, that drops to between twenty-nine and thirty-six percent.
+Text classifiers can be fooled by changing just a few words. An attacker swaps words for near-synonyms. A person still reads the same meaning, but the model changes its answer. Take the A G News dataset, where each news snippet must be sorted into one of four topics. A standard Bert model puts ninety-four percent of normal sentences in the right topic. But when an attacker is allowed to swap a few words, it gets only twenty-nine to thirty-six percent right.
 
 ## Slide 3: TMD (about 35 seconds)
 
