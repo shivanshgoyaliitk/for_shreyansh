@@ -18,9 +18,9 @@ Text classifiers can be fooled by changing just a few words. An attacker swaps w
 
 > Point at (do not paste): when you hear "ninety-four percent", point at the 94% box; at "twenty-nine to thirty-six", the orange 29–36% box.
 
-## Slide 3: TMD (about 35 seconds)
+## Slide 3: TMD (about 30 seconds)
 
-T M D defends in three steps. First, Bert turns each sentence into an embedding: a point in space. Second, a generative adversarial network learns where the embeddings of normal, unattacked sentences lie. This region is called the manifold. Third, at test time, T M D draws thirty random points from that network, keeps the one closest to the input, and classifies that point instead. The idea is that an attack pushes a sentence off the manifold, and projecting it back undoes the attack. T M D is trained on normal sentences only. It never sees an attack.
+T M D defends in three steps. First, Bert turns each sentence into an embedding: a point in space. Second, a generative adversarial network learns where the embeddings of normal, unattacked sentences lie. This region is called the manifold. Third, at test time, T M D draws thirty random points from that network, keeps the one closest to the input, and classifies that point instead. T M D is trained on normal sentences only. It never sees an attack.
 
 > Point at (do not paste): "First", "Second", "Third": move across the Embed, Learn and Project boxes; at "never sees an attack", the orange line.
 
