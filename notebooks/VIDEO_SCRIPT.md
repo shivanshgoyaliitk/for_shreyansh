@@ -2,7 +2,7 @@
 
 One block per slide, in deck order. Paste each block into ElevenLabs separately, so each audio clip lines up with its slide when you edit the video. The text is written for speech: acronyms are spelled out with spaces (T M D, P W W S) so the voice reads them letter by letter, and "Bert" and "Text Fooler" are written the way they are said.
 
-Total: about 600 words, about 4 minutes at a normal pace (the limit is 5).
+Total: about 725 words, roughly 4.5 minutes at ElevenLabs' default pace (the limit is 5). If the clips add up to more than 4:45, shorten slides 3 and 6 first.
 
 ---
 
