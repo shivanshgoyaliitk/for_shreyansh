@@ -16,11 +16,11 @@ Text classifiers can be fooled by changing just a few words. An attacker swaps w
 
 ## Slide 3: TMD (about 35 seconds)
 
-T M D defends in three steps. First, Bert turns each sentence into an embedding: a point in space. Second, a generative adversarial network learns where the embeddings of clean sentences lie. This region is called the manifold. Third, at test time, T M D draws thirty random points from that network, keeps the one closest to the input, and classifies that point instead. The idea is that an attack pushes a sentence off the manifold, and projecting it back undoes the attack. T M D is trained on clean sentences only. It never sees an attack.
+T M D defends in three steps. First, Bert turns each sentence into an embedding: a point in space. Second, a generative adversarial network learns where the embeddings of normal, unattacked sentences lie. This region is called the manifold. Third, at test time, T M D draws thirty random points from that network, keeps the one closest to the input, and classifies that point instead. The idea is that an attack pushes a sentence off the manifold, and projecting it back undoes the attack. T M D is trained on normal sentences only. It never sees an attack.
 
 ## Slide 4: TMD's score depends on the attack (about 30 seconds)
 
-We first reproduced T M D with the authors' own attack code. Our results are close to the paper on two of the three attacks, and lower on P W W S. Then we found a weakness. Under the P W W S attack, T M D keeps sixty-three percent accuracy when the attacker queries it directly. But when we take sentences that were already attacked on a plain Bert model and give them to T M D, it keeps only eleven percent. So its score depends heavily on how the attack is run.
+We first reproduced T M D with the authors' own attack code. Our results are close to the paper on two of the three attacks, and lower on P W W S. Then we found a weakness. Under the P W W S attack, T M D still gets sixty-three percent right when the attacker queries it directly. But when we take sentences that were already attacked on a plain Bert model and give them to T M D, it gets only eleven percent right. So its score depends heavily on how the attack is run.
 
 ## Slide 5: our defense, two changes (about 35 seconds)
 
@@ -28,11 +28,11 @@ Our defense makes two changes. First, we replace the random search with a learne
 
 ## Slide 6: far ahead of attack-aware defenses (about 40 seconds)
 
-Because our defense learns from attacks, the fair comparison is with the paper's two adversarial-training defenses, A S C C and D N E. Against them, our defense is far ahead on all three attacks, by nineteen to forty-seven points, with both of our training seeds. Compared with T M D, we are ahead on Text Fooler and Bert-Attack with both seeds. On P W W S, our first seed is ahead and our second seed ties. Clean accuracy stays level, at about ninety-four point seven percent.
+Because our defense learns from attacks, the fair comparison is with the paper's two adversarial-training defenses, A S C C and D N E. Against them, our defense is far ahead on all three attacks, by nineteen to forty-seven points, with both of our training seeds. Compared with T M D, we are ahead on Text Fooler and Bert-Attack with both seeds. On P W W S, our first seed is ahead and our second seed ties. On normal sentences it stays as accurate as before, at about ninety-five percent.
 
 ## Slide 7: both changes are needed (about 30 seconds)
 
-Is the gain just from training on attacks? This ablation says no. With the same adversarially trained Bert, using no projection gives about fifty percent under attack. Adding T M D's random search gives sixty-six. Our encoder gives eighty. The training data is the same in all three cases. The projection makes the difference.
+Is the gain just from training on attacks? This ablation says no. With the same adversarially trained Bert, with no projection it gets about fifty percent right under attack. Adding T M D's random search raises that to sixty-six. Our encoder raises it to eighty. The training data is the same in all three cases. The projection makes the difference.
 
 ## Slide 8: attacks it never saw (about 30 seconds)
 
@@ -40,7 +40,7 @@ We also checked whether it only works on the attacks it was trained on. Each row
 
 ## Slide 9: a new kind of attack, typos (about 30 seconds)
 
-Finally, we tried a completely different attack: Deep Word Bug, which makes typos instead of swapping words. None of our defenses was trained on it. T M D keeps fifty-five percent. Our defenses keep seventy-two to eighty-one percent, and every version is significantly better than T M D. So the robustness is not limited to word swaps.
+Finally, we tried a completely different attack: Deep Word Bug, which makes typos instead of swapping words. None of our defenses was trained on it. T M D gets fifty-five percent right. Our defenses get seventy-two to eighty-one percent right, and every version is significantly better than T M D. So the robustness is not limited to word swaps.
 
 ## Slide 10: what to take away (about 35 seconds)
 
